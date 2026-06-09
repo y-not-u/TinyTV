@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 
+/build/
 firmware/SmallDesktopDisplay/build/
 screen-test/ScreenTest/build/
 
