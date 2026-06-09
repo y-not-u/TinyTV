@@ -151,8 +151,10 @@ void getCityCode(){
   
   //如果服务器响应OK则从服务器获取响应体信息并通过串口输出
   if (httpCode == HTTP_CODE_OK) {
-    String str = httpClient.getString();
-    
+    String str;
+    str.reserve(256);
+    str = httpClient.getString();
+
     int aa = str.indexOf("id=");
     if(aa>-1)
     {
@@ -199,12 +201,16 @@ void getCityWeater(){
   //如果服务器响应OK则从服务器获取响应体信息并通过串口输出
   if (httpCode == HTTP_CODE_OK) {
 
-    String str = httpClient.getString();
+    String str;
+    str.reserve(4096);
+    str = httpClient.getString();
     String jsonCityDZ;
     String jsonDataSK;
     String jsonFC;
 
-    if(Weather_extractIndexData(str, &jsonCityDZ, &jsonDataSK, &jsonFC) && weaterData(&jsonCityDZ,&jsonDataSK,&jsonFC))
+    bool parsed = Weather_extractIndexData(str, &jsonCityDZ, &jsonDataSK, &jsonFC);
+    str = "";
+    if(parsed && weaterData(&jsonCityDZ,&jsonDataSK,&jsonFC))
     {
       Serial.println("获取成功");
     }
@@ -231,6 +237,12 @@ void getCityWeater(){
 
 
 String scrollText[7];//天气信息存储
+
+void Weather_reserveBuffers()
+{
+  for(uint8_t i = 0; i < 7; i++)
+    scrollText[i].reserve(32);
+}
 
 String Weather_withUnit(String value, const char* unit)
 {
@@ -294,36 +306,27 @@ void Weather_drawIconScaled(int16_t x, int16_t y, int weatherCode)
 
 void Weather_showStatus(const char* title, const char* message)
 {
-  clk.setColorDepth(8);
-  clk.createSprite(220, 212);
-  clk.fillSprite(TFT_BLACK);
-  clk.setTextWrap(false);
-  clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_GREEN, TFT_BLACK);
-  clk.drawString(title, 110, 86, 2);
-  clk.setTextColor(TFT_WHITE, TFT_BLACK);
-  clk.drawString(message, 110, 118, 2);
-  clk.pushSprite(10, 28);
-  clk.deleteSprite();
+  tft.fillRect(10, 28, 220, 212, TFT_BLACK);
+  tft.setTextWrap(false);
+  tft.setTextDatum(CC_DATUM);
+  tft.setTextColor(TFT_GREEN, TFT_BLACK);
+  tft.drawString(title, 120, 114, 2);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(message, 120, 146, 2);
 }
 
 void Weather_drawDetails(const String details[], int detailCount)
 {
-  clk.setColorDepth(8);
-  clk.loadFont(ZdyLwFont_20);
-
-  clk.createSprite(206, 82);
-  clk.fillSprite(bgColor);
-  clk.setTextWrap(false);
-  clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_WHITE, bgColor);
+  tft.fillRect(17, 104, 206, 82, bgColor);
+  tft.loadFont(ZdyLwFont_20);
+  tft.setTextWrap(false);
+  tft.setTextDatum(CC_DATUM);
+  tft.setTextColor(TFT_WHITE, bgColor);
   for(int i=0; i<detailCount; i++)
   {
-    clk.drawString(details[i], 103, 12 + i * 20);
+    tft.drawString(details[i], 120, 116 + i * 20);
   }
-  clk.pushSprite(17, 104);
-  clk.deleteSprite();
-  clk.unloadFont();
+  tft.unloadFont();
 }
 
 //天气信息写到屏幕上

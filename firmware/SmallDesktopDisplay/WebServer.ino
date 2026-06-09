@@ -9,10 +9,42 @@ String htmlEscape(String value)
   return value;
 }
 
+void Web_sendP(PGM_P content)
+{
+  server.sendContent_P(content);
+}
+
+void Web_sendEscaped(String value)
+{
+  server.sendContent(htmlEscape(value));
+}
+
+void Web_sendInt(int value)
+{
+  server.sendContent(String(value));
+}
+
+const char* Web_stockInputName(uint8_t group, uint8_t index)
+{
+  static const char* const inputNames[2][3] = {
+    {"web_stock_day_0", "web_stock_day_1", "web_stock_day_2"},
+    {"web_stock_night_0", "web_stock_night_1", "web_stock_night_2"}
+  };
+  return inputNames[group][index];
+}
+
+void Web_sendStockInput(uint8_t group, uint8_t index)
+{
+  Web_sendP(PSTR("<input type='text' name='"));
+  server.sendContent(String(Web_stockInputName(group, index)));
+  Web_sendP(PSTR("' maxlength='15' value='"));
+  Web_sendEscaped(String(getStockCode(group, index)));
+  Web_sendP(PSTR("'>"));
+}
+
 //web设置页面
 void handleconfig()
 {
-  String msg;
   int web_cc,web_setro,web_lcdbl,web_upt,web_dhten;
   int currentCity = cityCode.toInt();
   if(currentCity < 101000000 || currentCity > 102000000)
@@ -100,8 +132,8 @@ void handleconfig()
     }
     for(uint8_t i = 0; i < 3; i++)
     {
-      String dayName = "web_stock_day_" + String(i);
-      String nightName = "web_stock_night_" + String(i);
+      String dayName = Web_stockInputName(0, i);
+      String nightName = Web_stockInputName(1, i);
       if(server.hasArg(dayName))
         setStockCode(0, i, server.arg(dayName));
       if(server.hasArg(nightName))
@@ -124,59 +156,66 @@ void handleconfig()
     return;
   }
 
-  if (server.hasArg("saved"))
-  {
-    msg = "<div class='ok'>Saved</div>";
-  }
-
   bool wifiConnected = WiFi.status() == WL_CONNECTED;
-  String wifiStatus = wifiConnected ? "已连接" : "未连接";
-  String ipAddress = wifiConnected ? WiFi.localIP().toString() : "--";
 
   //网页界面代码段
-  String content = "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>";
-        content += "<style>body{margin:0;background:#101418;color:#f6f7f8;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}";
-        content += ".wrap{max-width:620px;margin:auto;padding:18px}.title{font-size:24px;font-weight:700;margin:8px 0 16px}";
-        content += ".card{background:#1b2229;border:1px solid #303841;border-radius:8px;padding:14px;margin:12px 0}.card h3{margin:0 0 12px;font-size:19px}";
-        content += ".item{margin-top:10px}.item:first-of-type{margin-top:0}.divider{border-top:1px solid #2b333b;padding-top:12px;margin-top:14px}";
-        content += "label{display:block;color:#aeb6bf;font-size:13px;margin:0 0 6px}input{box-sizing:border-box;width:100%;font-size:16px;padding:11px;border-radius:6px;border:1px solid #46515c;background:#0f1419;color:#fff}";
-        content += ".row{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px}.stockrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.inforow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.radio label{display:inline-block;margin:0 12px 0 0;color:#f6f7f8}.radio input{width:auto}.note{color:#aeb6bf;font-size:13px;line-height:1.45;margin:4px 0 0}.value{font-size:16px}";
-        content += "button,.btn{display:inline-block;text-align:center;text-decoration:none;color:#fff;background:#1e88e5;border:0;border-radius:6px;padding:11px 14px;font-size:16px;margin:6px 6px 0 0}.btn.alt{background:#37414b}.ok{background:#173d2b;color:#7ee2a8;border-radius:6px;padding:10px;margin-bottom:10px}@media(max-width:420px){.row,.stockrow,.inforow{grid-template-columns:1fr}}</style>";
-        content += "</head><body><main class='wrap'><div class='title'>TinyTV 设置</div>";
-        content += msg;
-        content += "<section class='card'><h3>设备信息</h3><div class='inforow'>";
-        content += "<div><label>Wi-Fi 状态</label><div class='value'>" + wifiStatus + "</div></div>";
-        content += "<div><label>IP 地址</label><div class='value'>" + ipAddress + "</div></div>";
-        content += "<div><label>固件版本</label><div class='value'>" + String(Version) + "</div></div>";
-        content += "</div></section>";
-        content += "<form action='/' method='POST'>";
-        content += "<section class='card'><h3>时钟页</h3><div class='item'><label>时间同步</label><p class='note'>NTP 自动同步，时区 UTC+8</p></div></section>";
-        content += "<section class='card'><h3>天气页</h3>";
-        content += "<div class='row'><div><label>城市代码</label><input type='number' name='web_ccode' value='" + cityCode + "'></div>";
-        content += "<div><label>刷新分钟</label><input type='number' name='web_upwe_t' min='1' max='60' value='" + String(updateweater_time) + "'></div></div>";
-        #if DHT_EN
-        content += "<div class='item divider'><label>DHT11 传感器</label><div class='radio'>";
-        content += "<label><input type='radio' name='web_DHT11_en' value='0'";
-        if(DHT_img_flag == 0) content += " checked";
-        content += "> 关闭</label><label><input type='radio' name='web_DHT11_en' value='1'";
-        if(DHT_img_flag != 0) content += " checked";
-        content += "> 开启</label></div></div>";
-        #endif
-        content += "</section><section class='card'><h3>股票页</h3>";
-        content += "<div class='item'><label>白天股票 06:00-17:59</label><div class='stockrow'>";
-        for(uint8_t i=0;i<3;i++){ content += "<input type='text' name='web_stock_day_" + String(i) + "' maxlength='15' value='" + htmlEscape(getStockCode(0, i)) + "'>"; }
-        content += "</div></div><div class='item'><label>晚上股票 18:00-05:59</label><div class='stockrow'>";
-        for(uint8_t i=0;i<3;i++){ content += "<input type='text' name='web_stock_night_" + String(i) + "' maxlength='15' value='" + htmlEscape(getStockCode(1, i)) + "'>"; }
-        content += "</div></div>";
-        content += "</section><section class='card'><h3>设置页</h3>";
-        content += "<div class='item'><label>亮度 20-100</label><input type='number' name='web_bl' min='20' max='100' value='" + String(LCD_BL_PWM) + "'></div>";
-        content += "<div class='item'><label>屏幕方向</label><div class='radio'>";
-        const char* rotationLabels[] = {"上", "右", "下", "左"};
-        for(int i=0;i<4;i++){ content += "<label><input type='radio' name='web_set_rotation' value='" + String(i) + "'"; if(i==LCD_Rotation) content += " checked"; content += "> " + String(rotationLabels[i]) + "</label>"; }
-        content += "</div></div></section><button type='submit'>保存设置</button></form>";
-        content += "<section class='card'><h3>页面控制</h3><a class='btn' href='/SetPage?Click'>单击/切换</a><a class='btn' href='/SetPage?DoubleClick'>双击/确认</a><a class='btn alt' href='/SetPage?LongClick'>长按/返回</a></section>";
-        content += "</main></body></html>";
-  server.send(200, "text/html; charset=utf-8", content);
+  server.chunkedResponseModeStart(200, "text/html; charset=utf-8");
+  Web_sendP(PSTR("<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<style>body{margin:0;background:#101418;color:#f6f7f8;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}"
+    ".wrap{max-width:620px;margin:auto;padding:18px}.title{font-size:24px;font-weight:700;margin:8px 0 16px}"
+    ".card{background:#1b2229;border:1px solid #303841;border-radius:8px;padding:14px;margin:12px 0}.card h3{margin:0 0 12px;font-size:19px}"
+    ".item{margin-top:10px}.item:first-of-type{margin-top:0}.divider{border-top:1px solid #2b333b;padding-top:12px;margin-top:14px}"
+    "label{display:block;color:#aeb6bf;font-size:13px;margin:0 0 6px}input{box-sizing:border-box;width:100%;font-size:16px;padding:11px;border-radius:6px;border:1px solid #46515c;background:#0f1419;color:#fff}"
+    ".row{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px}.stockrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.inforow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.radio label{display:inline-block;margin:0 12px 0 0;color:#f6f7f8}.radio input{width:auto}.note{color:#aeb6bf;font-size:13px;line-height:1.45;margin:4px 0 0}.value{font-size:16px}"
+    "button,.btn{display:inline-block;text-align:center;text-decoration:none;color:#fff;background:#1e88e5;border:0;border-radius:6px;padding:11px 14px;font-size:16px;margin:6px 6px 0 0}.btn.alt{background:#37414b}.ok{background:#173d2b;color:#7ee2a8;border-radius:6px;padding:10px;margin-bottom:10px}@media(max-width:420px){.row,.stockrow,.inforow{grid-template-columns:1fr}}</style>"
+    "</head><body><main class='wrap'><div class='title'>TinyTV 设置</div>"));
+  if(server.hasArg("saved"))
+    Web_sendP(PSTR("<div class='ok'>Saved</div>"));
+  Web_sendP(PSTR("<section class='card'><h3>设备信息</h3><div class='inforow'><div><label>Wi-Fi 状态</label><div class='value'>"));
+  Web_sendP(wifiConnected ? PSTR("已连接") : PSTR("未连接"));
+  Web_sendP(PSTR("</div></div><div><label>IP 地址</label><div class='value'>"));
+  if(wifiConnected)
+    server.sendContent(WiFi.localIP().toString());
+  else
+    Web_sendP(PSTR("--"));
+  Web_sendP(PSTR("</div></div><div><label>固件版本</label><div class='value'>" Version "</div></div></div></section>"
+    "<form action='/' method='POST'><section class='card'><h3>时钟页</h3><div class='item'><label>时间同步</label><p class='note'>NTP 自动同步，时区 UTC+8</p></div></section>"
+    "<section class='card'><h3>天气页</h3><div class='row'><div><label>城市代码</label><input type='number' name='web_ccode' value='"));
+  Web_sendEscaped(cityCode);
+  Web_sendP(PSTR("'></div><div><label>刷新分钟</label><input type='number' name='web_upwe_t' min='1' max='60' value='"));
+  Web_sendInt(updateweater_time);
+  Web_sendP(PSTR("'></div></div>"));
+  #if DHT_EN
+  Web_sendP(PSTR("<div class='item divider'><label>DHT11 传感器</label><div class='radio'><label><input type='radio' name='web_DHT11_en' value='0'"));
+  if(DHT_img_flag == 0) Web_sendP(PSTR(" checked"));
+  Web_sendP(PSTR("> 关闭</label><label><input type='radio' name='web_DHT11_en' value='1'"));
+  if(DHT_img_flag != 0) Web_sendP(PSTR(" checked"));
+  Web_sendP(PSTR("> 开启</label></div></div>"));
+  #endif
+  Web_sendP(PSTR("</section><section class='card'><h3>股票页</h3><div class='item'><label>白天股票 06:00-17:59</label><div class='stockrow'>"));
+  for(uint8_t i=0;i<3;i++) Web_sendStockInput(0, i);
+  Web_sendP(PSTR("</div></div><div class='item'><label>晚上股票 18:00-05:59</label><div class='stockrow'>"));
+  for(uint8_t i=0;i<3;i++) Web_sendStockInput(1, i);
+  Web_sendP(PSTR("</div></div></section><section class='card'><h3>设置页</h3><div class='item'><label>亮度 20-100</label><input type='number' name='web_bl' min='20' max='100' value='"));
+  Web_sendInt(LCD_BL_PWM);
+  Web_sendP(PSTR("'></div><div class='item'><label>屏幕方向</label><div class='radio'>"));
+  for(int i=0;i<4;i++)
+  {
+    Web_sendP(PSTR("<label><input type='radio' name='web_set_rotation' value='"));
+    Web_sendInt(i);
+    Web_sendP(PSTR("'"));
+    if(i == LCD_Rotation) Web_sendP(PSTR(" checked"));
+    Web_sendP(PSTR("> "));
+    if(i == 0) Web_sendP(PSTR("上"));
+    else if(i == 1) Web_sendP(PSTR("右"));
+    else if(i == 2) Web_sendP(PSTR("下"));
+    else Web_sendP(PSTR("左"));
+    Web_sendP(PSTR("</label>"));
+  }
+  Web_sendP(PSTR("</div></div></section><button type='submit'>保存设置</button></form>"
+    "<section class='card'><h3>页面控制</h3><a class='btn' href='/SetPage?Click'>单击/切换</a><a class='btn' href='/SetPage?DoubleClick'>双击/确认</a><a class='btn alt' href='/SetPage?LongClick'>长按/返回</a></section>"
+    "</main></body></html>"));
+  server.chunkedResponseFinalize();
 }
 
 //no need authentication
@@ -270,7 +309,7 @@ void Web_sever_Win()
   clk.drawString("Connect to Config:",70,10,2);
   // clk.drawString("IP:",45,60,2);
   clk.setTextColor(TFT_WHITE, 0x0000); 
-  clk.drawString("http://sd3.local",100,40,4);
+  clk.drawString("http://sd3.local",100,40,2);
   // clk.drawString(&IP_adr,125,70,2);
   clk.pushSprite(20,40);  //窗口位置
     

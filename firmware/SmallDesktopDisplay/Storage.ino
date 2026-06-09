@@ -70,12 +70,10 @@ void saveStockConfig()
   {
     for(uint8_t index = 0; index < 3; index++)
     {
-      String code = stockCodes[group][index];
       int offset = stock_addr + ((group * 3 + index) * 16);
       for(int i = 0; i < 16; i++)
       {
-        char c = i < code.length() ? code.charAt(i) : '\0';
-        EEPROM.write(offset + i, c);
+        EEPROM.write(offset + i, stockCodes[group][index][i]);
       }
     }
   }
@@ -101,21 +99,21 @@ void readStockConfig()
       code[15] = '\0';
       if(hasStockMarker)
       {
-        stockCodes[group][index] = String(code);
+        strncpy(stockCodes[group][index], code, 15);
+        stockCodes[group][index][15] = '\0';
         hasSavedStock = true;
       }
       else if(strlen(code) > 0)
       {
-        stockCodes[group][index] = String(code);
+        strncpy(stockCodes[group][index], code, 15);
+        stockCodes[group][index][15] = '\0';
         hasSavedStock = true;
       }
     }
   }
-  if(hasSavedStock)
-    stockCode = stockCodes[0][0];
 }
 
-String getStockCode(uint8_t group, uint8_t index)
+const char* getStockCode(uint8_t group, uint8_t index)
 {
   if(group > 1 || index > 2)
     return "";
@@ -130,8 +128,7 @@ void setStockCode(uint8_t group, uint8_t index, String code)
   code.toUpperCase();
   if(code.length() > 15)
     code = code.substring(0, 15);
-  stockCodes[group][index] = code;
-  stockCode = stockCodes[0][0];
+  code.toCharArray(stockCodes[group][index], 16);
 }
 
 uint8_t currentStockGroup()
