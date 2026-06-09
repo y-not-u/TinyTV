@@ -237,7 +237,7 @@ void readwificonfig();
 void deletewificonfig();
 void getCityCode();
 void getCityWeater();
-void weaterData(String *cityDZ,String *dataSK,String *dataFC);
+bool weaterData(String *cityDZ,String *dataSK,String *dataFC);
 void saveStockConfig();
 void readStockConfig();
 void Serial_set();
@@ -404,7 +404,7 @@ void setup()
   //   delay(5);
   // }
   if(CityCODE>=101000000 && CityCODE<=102000000) 
-    cityCode = CityCODE;  
+    cityCode = String(CityCODE);
   else
   {
     cityCode = "101010100";
@@ -414,9 +414,6 @@ void setup()
 	   
   tft.fillScreen(TFT_BLACK);//清屏
   
-  TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));  //温度图标
-  TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));  //湿度图标
-
   if(currentPage == PAGE_WEATHER)
     getCityWeater();
 #if DHT_EN

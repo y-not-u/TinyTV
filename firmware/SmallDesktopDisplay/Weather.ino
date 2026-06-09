@@ -1,5 +1,90 @@
 const uint16_t WEATHER_HTTP_TIMEOUT_MS = 3500;
 
+void Weather_applyRequestHeaders(HTTPClient &httpClient, const String &referer)
+{
+  httpClient.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36");
+  httpClient.addHeader("Referer", referer);
+  httpClient.addHeader("Accept", "*/*");
+  httpClient.addHeader("Accept-Language", "zh-CN,zh;q=0.9");
+  httpClient.addHeader("Connection", "close");
+}
+
+int Weather_findObjectEnd(const String &payload, int objectStart)
+{
+  int depth = 0;
+  bool inString = false;
+  bool escaped = false;
+
+  for(int i = objectStart; i < payload.length(); i++)
+  {
+    char c = payload.charAt(i);
+
+    if(escaped)
+    {
+      escaped = false;
+      continue;
+    }
+
+    if(c == '\\')
+    {
+      escaped = true;
+      continue;
+    }
+
+    if(c == '"')
+    {
+      inString = !inString;
+      continue;
+    }
+
+    if(inString)
+      continue;
+
+    if(c == '{')
+      depth++;
+    else if(c == '}')
+    {
+      depth--;
+      if(depth == 0)
+        return i;
+    }
+  }
+
+  return -1;
+}
+
+bool Weather_extractJsonObject(const String &payload, const char* marker, String *json)
+{
+  int markerIndex = payload.indexOf(marker);
+  if(markerIndex < 0)
+    return false;
+
+  int objectStart = payload.indexOf('{', markerIndex + strlen(marker));
+  if(objectStart < 0)
+    return false;
+
+  int objectEnd = Weather_findObjectEnd(payload, objectStart);
+  if(objectEnd <= objectStart)
+    return false;
+
+  *json = payload.substring(objectStart, objectEnd + 1);
+  return true;
+}
+
+bool Weather_extractIndexData(const String &payload, String *cityDZ, String *dataSK, String *dataFC)
+{
+  if(!Weather_extractJsonObject(payload, "weatherinfo", cityDZ))
+    return false;
+
+  if(!Weather_extractJsonObject(payload, "var dataSK", dataSK))
+    return false;
+
+  if(!Weather_extractJsonObject(payload, "\"f\":[", dataFC))
+    return false;
+
+  return true;
+}
+
 void LCD_reflash(int en)
 {
   if (now() != prevDisplay || en == 1) 
@@ -57,8 +142,7 @@ void getCityCode(){
   httpClient.setTimeout(WEATHER_HTTP_TIMEOUT_MS);
   
   //设置请求头中的User-Agent
-  httpClient.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1");
-  httpClient.addHeader("Referer", "http://www.weather.com.cn/");
+  Weather_applyRequestHeaders(httpClient, "http://www.weather.com.cn/");
  
   //启动连接并发送HTTP请求
   int httpCode = httpClient.GET();
@@ -105,8 +189,7 @@ void getCityWeater(){
   httpClient.setTimeout(WEATHER_HTTP_TIMEOUT_MS);
   
   //设置请求头中的User-Agent
-  httpClient.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1");
-  httpClient.addHeader("Referer", "http://www.weather.com.cn/");
+  Weather_applyRequestHeaders(httpClient, String("http://www.weather.com.cn/weather1d/") + cityCode + ".shtml");
  
   //启动连接并发送HTTP请求
   int httpCode = httpClient.GET();
@@ -117,31 +200,29 @@ void getCityWeater(){
   if (httpCode == HTTP_CODE_OK) {
 
     String str = httpClient.getString();
-    int indexStart = str.indexOf("weatherinfo\":");
-    int indexEnd = str.indexOf("};var alarmDZ");
+    String jsonCityDZ;
+    String jsonDataSK;
+    String jsonFC;
 
-    String jsonCityDZ = str.substring(indexStart+13,indexEnd);
-    //Serial.println(jsonCityDZ);
-
-    indexStart = str.indexOf("dataSK =");
-    indexEnd = str.indexOf(";var dataZS");
-    String jsonDataSK = str.substring(indexStart+8,indexEnd);
-    //Serial.println(jsonDataSK);
-
-    
-    indexStart = str.indexOf("\"f\":[");
-    indexEnd = str.indexOf(",{\"fa");
-    String jsonFC = str.substring(indexStart+5,indexEnd);
-    //Serial.println(jsonFC);
-    
-    weaterData(&jsonCityDZ,&jsonDataSK,&jsonFC);
-    Serial.println("获取成功");
+    if(Weather_extractIndexData(str, &jsonCityDZ, &jsonDataSK, &jsonFC) && weaterData(&jsonCityDZ,&jsonDataSK,&jsonFC))
+    {
+      Serial.println("获取成功");
+    }
+    else
+    {
+      Serial.println("天气数据解析失败");
+      if(currentPage == PAGE_WEATHER)
+        Weather_showStatus("Update failed", "Parse failed");
+    }
     
   } else {
     Serial.println("请求城市天气错误：");
-    Serial.print(httpCode);
+    Serial.println(httpCode);
     if(currentPage == PAGE_WEATHER)
-      Weather_showStatus("Weather", "Update failed");
+    {
+      String message = "HTTP " + String(httpCode);
+      Weather_showStatus("Update failed", message.c_str());
+    }
   }
  
   //关闭ESP8266与服务器连接
@@ -151,18 +232,27 @@ void getCityWeater(){
 
 String scrollText[7];//天气信息存储
 
+String Weather_withUnit(String value, const char* unit)
+{
+  value.trim();
+  if(value.length() == 0 || value == "null")
+    return "--";
+
+  return value + unit;
+}
+
 void Weather_showStatus(const char* title, const char* message)
 {
   clk.setColorDepth(8);
-  clk.createSprite(150, 126);
+  clk.createSprite(220, 212);
   clk.fillSprite(TFT_BLACK);
   clk.setTextWrap(false);
   clk.setTextDatum(CC_DATUM);
   clk.setTextColor(TFT_GREEN, TFT_BLACK);
-  clk.drawString(title, 75, 46, 2);
+  clk.drawString(title, 110, 86, 2);
   clk.setTextColor(TFT_WHITE, TFT_BLACK);
-  clk.drawString(message, 75, 78, 2);
-  clk.pushSprite(10, 48);
+  clk.drawString(message, 110, 118, 2);
+  clk.pushSprite(10, 28);
   clk.deleteSprite();
 }
 
@@ -170,7 +260,8 @@ void Weather_drawDetails(const String details[], int detailCount)
 {
   clk.setColorDepth(8);
   clk.loadFont(ZdyLwFont_20);
-  clk.createSprite(150, 126);
+
+  clk.createSprite(150, 104);
   clk.fillSprite(bgColor);
   clk.setTextWrap(false);
   clk.setTextDatum(ML_DATUM);
@@ -179,34 +270,121 @@ void Weather_drawDetails(const String details[], int detailCount)
   {
     clk.drawString(details[i], 0, 12 + i * 20);
   }
-  clk.pushSprite(10, 48);
+  clk.pushSprite(14, 64);
   clk.deleteSprite();
   clk.unloadFont();
 }
 
 //天气信息写到屏幕上
-void weaterData(String *cityDZ,String *dataSK,String *dataFC)
+bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
 {
   //解析第一段JSON
   DynamicJsonDocument doc(1024);
-  deserializeJson(doc, *dataSK);
+  DeserializationError error = deserializeJson(doc, *dataSK);
+  if(error)
+  {
+    Serial.print("dataSK JSON错误: ");
+    Serial.println(error.c_str());
+    return false;
+  }
   JsonObject sk = doc.as<JsonObject>();
 
-  //TFT_eSprite clkb = TFT_eSprite(&tft);
+  String cityName = sk["cityname"].as<String>();
+  String currentTemp = Weather_withUnit(sk["temp"].as<String>(), "℃");
+  String currentHumidity = sk["SD"].as<String>();
+  currentHumidity.trim();
+  if(currentHumidity.length() == 0 || currentHumidity == "null")
+    currentHumidity = "--";
+  String currentWeather = sk["weather"].as<String>();
+  String windText = sk["WD"].as<String>() + sk["WS"].as<String>();
+  int weatherCode = atoi((sk["weathercode"].as<String>()).substring(1,3).c_str());
+  int pm25V = sk["aqi"];
+  int currentTempValue = sk["temp"].as<int>();
+
+  String aqiTxt = "优";
+  uint16_t pm25BgColor = tft.color565(156,202,127);//优
+  if(pm25V>200){
+    pm25BgColor = tft.color565(136,11,32);//重度
+    aqiTxt = "重度";
+  }else if(pm25V>150){
+    pm25BgColor = tft.color565(186,55,121);//中度
+    aqiTxt = "中度";
+  }else if(pm25V>100){
+    pm25BgColor = tft.color565(242,159,57);//轻
+    aqiTxt = "轻度";
+  }else if(pm25V>50){
+    pm25BgColor = tft.color565(247,219,100);//良
+    aqiTxt = "良";
+  }
+
+  error = deserializeJson(doc, *cityDZ);
+  if(error)
+  {
+    Serial.print("cityDZ JSON错误: ");
+    Serial.println(error.c_str());
+    return false;
+  }
+  JsonObject dz = doc.as<JsonObject>();
+  String todayWeather = dz["weather"].as<String>();
+
+  error = deserializeJson(doc, *dataFC);
+  if(error)
+  {
+    Serial.print("dataFC JSON错误: ");
+    Serial.println(error.c_str());
+    return false;
+  }
+  JsonObject fc = doc.as<JsonObject>();
+  String lowTemp = Weather_withUnit(fc["fd"].as<String>(), "℃");
+  String highTemp = Weather_withUnit(fc["fc"].as<String>(), "℃");
+
+  tft.fillScreen(bgColor);
   
   /***绘制相关文字***/
   clk.setColorDepth(8);
   clk.loadFont(ZdyLwFont_20);
-  
+
+  //城市名称
+  clk.createSprite(86, 30);
+  clk.fillSprite(bgColor);
+  clk.setTextDatum(ML_DATUM);
+  clk.setTextColor(TFT_WHITE, bgColor);
+  clk.drawString(cityName, 0, 16);
+  clk.pushSprite(14, 16);
+  clk.deleteSprite();
+
+  //空气指数
+  clk.createSprite(58, 26);
+  clk.fillSprite(bgColor);
+  clk.fillRoundRect(2,1,54,24,4,pm25BgColor);
+  clk.setTextDatum(CC_DATUM);
+  clk.setTextColor(0x0000);
+  clk.drawString(aqiTxt,29,14);
+  clk.pushSprite(102, 17);
+  clk.deleteSprite();
+
+  //天气图标
+  wrat.printfweather(170,15,weatherCode);
+
+  scrollText[0] = "实时天气 " + currentWeather;
+  scrollText[1] = "空气质量 " + aqiTxt;
+  scrollText[2] = "风向 " + windText;
+  scrollText[3] = "今日" + todayWeather;
+  scrollText[4] = "最低温度 " + lowTemp;
+  scrollText[5] = "最高温度 " + highTemp;
+  Weather_drawDetails(scrollText, 6);
+  clk.loadFont(ZdyLwFont_20);
+
   //温度
-  clk.createSprite(58, 24); 
+  TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));
+  clk.createSprite(58, 24);
   clk.fillSprite(bgColor);
   clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_WHITE, bgColor); 
-  clk.drawString(sk["temp"].as<String>()+"℃",28,13);
+  clk.setTextColor(TFT_WHITE, bgColor);
+  clk.drawString(currentTemp,28,13);
   clk.pushSprite(100,184);
   clk.deleteSprite();
-  tempnum = sk["temp"].as<int>();
+  tempnum = currentTempValue;
   tempnum = tempnum+10;
   if(tempnum<10)
     tempcol=0x00FF;
@@ -226,16 +404,15 @@ void weaterData(String *cityDZ,String *dataSK,String *dataFC)
   tempWin();
   
   //湿度
-  clk.createSprite(58, 24); 
+  TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));
+  clk.createSprite(58, 24);
   clk.fillSprite(bgColor);
   clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_WHITE, bgColor); 
-  clk.drawString(sk["SD"].as<String>(),28,13);
-  //clk.drawString("100%",28,13);
+  clk.setTextColor(TFT_WHITE, bgColor);
+  clk.drawString(currentHumidity,28,13);
   clk.pushSprite(100,214);
   clk.deleteSprite();
-  //String A = sk["SD"].as<String>();
-  huminum = atoi((sk["SD"].as<String>()).substring(0,2).c_str());
+  huminum = atoi(currentHumidity.substring(0,2).c_str());
   
   if(huminum>90)
     humicol=0x00FF;
@@ -249,73 +426,8 @@ void weaterData(String *cityDZ,String *dataSK,String *dataFC)
     humicol=0xF00F;
   humidityWin();
 
-  
-  //城市名称
-  clk.createSprite(94, 30); 
-  clk.fillSprite(bgColor);
-  clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_WHITE, bgColor); 
-  clk.drawString(sk["cityname"].as<String>(),44,16);
-  clk.pushSprite(15,15);
-  clk.deleteSprite();
-
-  //PM2.5空气指数
-  uint16_t pm25BgColor = tft.color565(156,202,127);//优
-  String aqiTxt = "优";
-  int pm25V = sk["aqi"];
-  if(pm25V>200){
-    pm25BgColor = tft.color565(136,11,32);//重度
-    aqiTxt = "重度";
-  }else if(pm25V>150){
-    pm25BgColor = tft.color565(186,55,121);//中度
-    aqiTxt = "中度";
-  }else if(pm25V>100){
-    pm25BgColor = tft.color565(242,159,57);//轻
-    aqiTxt = "轻度";
-  }else if(pm25V>50){
-    pm25BgColor = tft.color565(247,219,100);//良
-    aqiTxt = "良";
-  }
-  clk.createSprite(56, 24); 
-  clk.fillSprite(bgColor);
-  clk.fillRoundRect(0,0,50,24,4,pm25BgColor);
-  clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(0x0000); 
-  clk.drawString(aqiTxt,25,13);
-  clk.pushSprite(104,18);
-  clk.deleteSprite();
-  
-  scrollText[0] = "实时天气 "+sk["weather"].as<String>();
-  scrollText[1] = "空气质量 "+aqiTxt;
-  scrollText[2] = "风向 "+sk["WD"].as<String>()+sk["WS"].as<String>();
-
-  //scrollText[6] = atoi((sk["weathercode"].as<String>()).substring(1,3).c_str()) ;
-
-  //天气图标
-  wrat.printfweather(170,15,atoi((sk["weathercode"].as<String>()).substring(1,3).c_str()));
-
-  
-  //左上角滚动字幕
-  //解析第二段JSON
-  deserializeJson(doc, *cityDZ);
-  JsonObject dz = doc.as<JsonObject>();
-  //Serial.println(sk["ws"].as<String>());
-  //横向滚动方式
-  //String aa = "今日天气:" + dz["weather"].as<String>() + "，温度:最低" + dz["tempn"].as<String>() + "，最高" + dz["temp"].as<String>() + " 空气质量:" + aqiTxt + "，风向:" + dz["wd"].as<String>() + dz["ws"].as<String>();
-  //scrollTextWidth = clk.textWidth(scrollText);
-  //Serial.println(aa);
-  scrollText[3] = "今日"+dz["weather"].as<String>();
-  
-  deserializeJson(doc, *dataFC);
-  JsonObject fc = doc.as<JsonObject>();
-  
-  scrollText[4] = "最低温度"+fc["fd"].as<String>()+"℃";
-  scrollText[5] = "最高温度"+fc["fc"].as<String>()+"℃";
-
-  //Serial.println(scrollText[0]);
-
   clk.unloadFont();
-  Weather_drawDetails(scrollText, 6);
+  return true;
 }
 
 int currentIndex = 0;
