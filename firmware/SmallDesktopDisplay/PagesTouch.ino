@@ -253,12 +253,11 @@ void Page_renderWeather(bool force)
   if(force)
   {
     tft.fillScreen(TFT_BLACK);
+    Page_drawHeader(pageNames[PAGE_WEATHER]);
     UpdateWeater_en = 1;
     weaterTime = 0;
     TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));
     TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));
-    if(WiFi.status() == WL_CONNECTED)
-      getCityWeater();
   }
   LCD_reflash(force ? 1 : 0);
 }

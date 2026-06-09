@@ -231,6 +231,7 @@ void humidityWin();
 void tempWin();
 void LCD_reflash(int en);
 void Weather_drawDetails(const String details[], int detailCount);
+void Weather_showStatus(const char* title, const char* message);
 void savewificonfig();
 void readwificonfig();
 void deletewificonfig();

@@ -1,3 +1,5 @@
+const uint16_t WEATHER_HTTP_TIMEOUT_MS = 3500;
+
 void LCD_reflash(int en)
 {
   if (now() != prevDisplay || en == 1) 
@@ -31,10 +33,10 @@ void LCD_reflash(int en)
     if(WiFi.status() == WL_CONNECTED)
     {
       // Serial.println("WIFI已连接");
+      Weather_showStatus("Weather", "Loading weather...");
       getCityWeater();
       if(UpdateWeater_en != 0) UpdateWeater_en = 0;
       weaterTime = millis();
-      syncClock(3);
       #if !WebSever_EN
       WiFi.forceSleepBegin(); // Wifi Off
       Serial.println("WIFI休眠......");
@@ -52,6 +54,7 @@ void getCityCode(){
  
   //配置请求地址。此处也可以不使用端口号和PATH而单纯的
   httpClient.begin(wificlient,URL); 
+  httpClient.setTimeout(WEATHER_HTTP_TIMEOUT_MS);
   
   //设置请求头中的User-Agent
   httpClient.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1");
@@ -99,6 +102,7 @@ void getCityWeater(){
   HTTPClient httpClient;
   
   httpClient.begin(wificlient,URL); 
+  httpClient.setTimeout(WEATHER_HTTP_TIMEOUT_MS);
   
   //设置请求头中的User-Agent
   httpClient.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 11_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/11.0 Mobile/15A372 Safari/604.1");
@@ -136,6 +140,8 @@ void getCityWeater(){
   } else {
     Serial.println("请求城市天气错误：");
     Serial.print(httpCode);
+    if(currentPage == PAGE_WEATHER)
+      Weather_showStatus("Weather", "Update failed");
   }
  
   //关闭ESP8266与服务器连接
@@ -144,6 +150,21 @@ void getCityWeater(){
 
 
 String scrollText[7];//天气信息存储
+
+void Weather_showStatus(const char* title, const char* message)
+{
+  clk.setColorDepth(8);
+  clk.createSprite(150, 126);
+  clk.fillSprite(TFT_BLACK);
+  clk.setTextWrap(false);
+  clk.setTextDatum(CC_DATUM);
+  clk.setTextColor(TFT_GREEN, TFT_BLACK);
+  clk.drawString(title, 75, 46, 2);
+  clk.setTextColor(TFT_WHITE, TFT_BLACK);
+  clk.drawString(message, 75, 78, 2);
+  clk.pushSprite(10, 48);
+  clk.deleteSprite();
+}
 
 void Weather_drawDetails(const String details[], int detailCount)
 {
