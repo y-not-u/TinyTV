@@ -39,10 +39,10 @@ void Webconfig()
   // new (&custom_field) WiFiManagerParameter(custom_radio_str); // custom html input
 
   const char* set_rotation = "<br/><label for='set_rotation'>Set Rotation</label>\
-                              <input type='radio' name='set_rotation' value='0' checked> One<br>\
-                              <input type='radio' name='set_rotation' value='1'> Two<br>\
-                              <input type='radio' name='set_rotation' value='2'> Three<br>\
-                              <input type='radio' name='set_rotation' value='3'> Four<br>";
+                              <input type='radio' name='set_rotation' value='0' checked> 上<br>\
+                              <input type='radio' name='set_rotation' value='1'> 右<br>\
+                              <input type='radio' name='set_rotation' value='2'> 下<br>\
+                              <input type='radio' name='set_rotation' value='3'> 左<br>";
   WiFiManagerParameter  custom_rot(set_rotation); // custom html input
   WiFiManagerParameter  custom_bl("LCDBL","LCD BackLight(20-100)","100",3);
   #if DHT_EN

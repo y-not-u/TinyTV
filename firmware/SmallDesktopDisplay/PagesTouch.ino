@@ -231,11 +231,18 @@ void Page_renderStock(bool force)
   clk.fillSprite(TFT_BLACK);
   clk.setTextDatum(CC_DATUM);
   clk.setTextColor(TFT_WHITE, TFT_BLACK);
-  clk.drawString(stockCode, 110, 34);
+  uint8_t stockGroup = currentStockGroup();
+  clk.drawString(stockGroup == 0 ? "白天股票" : "晚上股票", 110, 24);
   clk.setTextColor(TFT_GREEN, TFT_BLACK);
-  clk.drawString("Stock page ready", 110, 74);
+  for(uint8_t i = 0; i < 3; i++)
+  {
+    String code = getStockCode(stockGroup, i);
+    if(code.length() == 0)
+      code = "--";
+    clk.drawString(code, 110, 58 + (i * 28));
+  }
   clk.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  clk.drawString("Data API pending", 110, 112);
+  clk.drawString(stockGroup == 0 ? "06:00-17:59" : "18:00-05:59", 110, 140);
   clk.pushSprite(10, 54);
   clk.deleteSprite();
   clk.unloadFont();

@@ -131,6 +131,10 @@ int LCD_Rotation = 0;   //LCD屏幕方向
 int LCD_BL_PWM = 100;//屏幕亮度20-100，默认100
 String cityCode = "101010100";  //天气城市代码 北京:101010100
 String stockCode = "AAPL";
+String stockCodes[2][3] = {
+  {"AAPL", "MSFT", "GOOG"},
+  {"TSLA", "NVDA", "AMZN"}
+};
 //----------------------------------------------------
 
 //LCD屏幕相关设置
@@ -161,7 +165,8 @@ int DHT_addr = 3;//3 DHT使能标志位
 int UpWeT_addr = 4; //4 更新时间记录
 int CC_addr = 10;//被写入数据的EEPROM地址编号  10城市
 int wifi_addr = 30; //被写入数据的EEPROM地址编号  20wifi-ssid-psw
-int stock_addr = 150; //股票代码，最多15字节
+int stock_marker_addr = 149; //股票配置版本标记
+int stock_addr = 150; //股票代码，每个最多15字节，白天/晚上各3个
 
 time_t prevDisplay = 0;       //显示时间显示记录
 unsigned long weaterTime = 0; //天气更新时间记录
@@ -240,6 +245,9 @@ void getCityWeater();
 bool weaterData(String *cityDZ,String *dataSK,String *dataFC);
 void saveStockConfig();
 void readStockConfig();
+String getStockCode(uint8_t group, uint8_t index);
+void setStockCode(uint8_t group, uint8_t index, String code);
+uint8_t currentStockGroup();
 void Serial_set();
 void setBacklight(int value, bool saveToEeprom);
 void Page_next();
