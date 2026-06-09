@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+
+firmware/SmallDesktopDisplay/build/
+screen-test/ScreenTest/build/
+
+.DS_Store
