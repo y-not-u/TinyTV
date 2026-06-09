@@ -241,6 +241,57 @@ String Weather_withUnit(String value, const char* unit)
   return value + unit;
 }
 
+const uint8_t WEATHER_ICON_SCALE_NUM = 3;
+const uint8_t WEATHER_ICON_SCALE_DEN = 2;
+int16_t weatherIconX = 0;
+int16_t weatherIconY = 0;
+
+bool Weather_iconOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
+{
+  if(y >= tft.height())
+    return 0;
+
+  if(x >= tft.width() || y >= tft.height())
+    return 1;
+
+  int16_t sourceX = x - weatherIconX;
+  int16_t sourceY = y - weatherIconY;
+  uint16_t line[96];
+  int16_t lineX = weatherIconX + (sourceX * WEATHER_ICON_SCALE_NUM) / WEATHER_ICON_SCALE_DEN;
+
+  for(uint16_t row = 0; row < h; row++)
+  {
+    int16_t y0 = weatherIconY + ((sourceY + row) * WEATHER_ICON_SCALE_NUM) / WEATHER_ICON_SCALE_DEN;
+    int16_t y1 = weatherIconY + ((sourceY + row + 1) * WEATHER_ICON_SCALE_NUM) / WEATHER_ICON_SCALE_DEN;
+    uint16_t pixelH = (y1 > y0) ? (y1 - y0) : 1;
+    uint16_t lineLen = 0;
+
+    for(uint16_t col = 0; col < w; col++)
+    {
+      int16_t x0 = weatherIconX + ((sourceX + col) * WEATHER_ICON_SCALE_NUM) / WEATHER_ICON_SCALE_DEN;
+      int16_t x1 = weatherIconX + ((sourceX + col + 1) * WEATHER_ICON_SCALE_NUM) / WEATHER_ICON_SCALE_DEN;
+      uint16_t pixelW = (x1 > x0) ? (x1 - x0) : 1;
+      uint16_t color = bitmap[row * w + col];
+      while(pixelW-- && lineLen < (sizeof(line) / sizeof(line[0])))
+        line[lineLen++] = color;
+    }
+
+    for(uint16_t repeat = 0; repeat < pixelH; repeat++)
+      tft.pushImage(lineX, y0 + repeat, lineLen, 1, line);
+  }
+
+  return 1;
+}
+
+void Weather_drawIconScaled(int16_t x, int16_t y, int weatherCode)
+{
+  weatherIconX = x;
+  weatherIconY = y;
+  TJpgDec.setCallback(Weather_iconOutput);
+  wrat.printfweather(x, y, weatherCode);
+  TJpgDec.setCallback(tft_output);
+}
+
 void Weather_showStatus(const char* title, const char* message)
 {
   clk.setColorDepth(8);
@@ -261,16 +312,16 @@ void Weather_drawDetails(const String details[], int detailCount)
   clk.setColorDepth(8);
   clk.loadFont(ZdyLwFont_20);
 
-  clk.createSprite(150, 104);
+  clk.createSprite(206, 82);
   clk.fillSprite(bgColor);
   clk.setTextWrap(false);
-  clk.setTextDatum(ML_DATUM);
+  clk.setTextDatum(CC_DATUM);
   clk.setTextColor(TFT_WHITE, bgColor);
   for(int i=0; i<detailCount; i++)
   {
-    clk.drawString(details[i], 0, 12 + i * 20);
+    clk.drawString(details[i], 103, 12 + i * 20);
   }
-  clk.pushSprite(14, 64);
+  clk.pushSprite(17, 104);
   clk.deleteSprite();
   clk.unloadFont();
 }
@@ -345,44 +396,47 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   clk.loadFont(ZdyLwFont_20);
 
   //城市名称
-  clk.createSprite(86, 30);
+  clk.createSprite(200, 44);
   clk.fillSprite(bgColor);
-  clk.setTextDatum(ML_DATUM);
+  clk.setTextWrap(false);
+  clk.setTextDatum(CC_DATUM);
   clk.setTextColor(TFT_WHITE, bgColor);
-  clk.drawString(cityName, 0, 16);
-  clk.pushSprite(14, 16);
+  clk.setTextSize(2);
+  clk.drawString(cityName, 100, 23);
+  clk.setTextSize(1);
+  clk.pushSprite(20, 8);
   clk.deleteSprite();
 
   //空气指数
-  clk.createSprite(58, 26);
+  clk.createSprite(72, 26);
   clk.fillSprite(bgColor);
-  clk.fillRoundRect(2,1,54,24,4,pm25BgColor);
+  clk.fillRoundRect(2,1,68,24,4,pm25BgColor);
+  clk.setTextWrap(false);
   clk.setTextDatum(CC_DATUM);
   clk.setTextColor(0x0000);
-  clk.drawString(aqiTxt,29,14);
-  clk.pushSprite(102, 17);
+  clk.drawString(aqiTxt,36,14);
+  clk.pushSprite(84, 54);
   clk.deleteSprite();
 
   //天气图标
-  wrat.printfweather(170,15,weatherCode);
+  Weather_drawIconScaled(75,92,weatherCode);
 
-  scrollText[0] = "实时天气 " + currentWeather;
-  scrollText[1] = "空气质量 " + aqiTxt;
-  scrollText[2] = "风向 " + windText;
-  scrollText[3] = "今日" + todayWeather;
-  scrollText[4] = "最低温度 " + lowTemp;
-  scrollText[5] = "最高温度 " + highTemp;
-  Weather_drawDetails(scrollText, 6);
+  scrollText[0] = "空气质量 " + aqiTxt;
+  scrollText[1] = "风向 " + windText;
+  scrollText[2] = "今日 " + todayWeather;
+  scrollText[3] = "温度 " + lowTemp + "-" + highTemp;
+  scrollText[4] = "最高温度 " + highTemp;
+  scrollText[5] = "湿度 " + currentHumidity;
   clk.loadFont(ZdyLwFont_20);
 
   //温度
-  TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));
-  clk.createSprite(58, 24);
+  TJpgDec.drawJpg(35,198,temperature, sizeof(temperature));
+  clk.createSprite(64, 24);
   clk.fillSprite(bgColor);
   clk.setTextDatum(CC_DATUM);
   clk.setTextColor(TFT_WHITE, bgColor);
-  clk.drawString(currentTemp,28,13);
-  clk.pushSprite(100,184);
+  clk.drawString(currentTemp,32,13);
+  clk.pushSprite(61,198);
   clk.deleteSprite();
   tempnum = currentTempValue;
   tempnum = tempnum+10;
@@ -401,16 +455,16 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
     tempcol=0xF00F;
     tempnum=50;
   }
-  tempWin();
+  tempWinAt(67,224);
   
   //湿度
-  TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));
-  clk.createSprite(58, 24);
+  TJpgDec.drawJpg(132,198,humidity, sizeof(humidity));
+  clk.createSprite(64, 24);
   clk.fillSprite(bgColor);
   clk.setTextDatum(CC_DATUM);
   clk.setTextColor(TFT_WHITE, bgColor);
-  clk.drawString(currentHumidity,28,13);
-  clk.pushSprite(100,214);
+  clk.drawString(currentHumidity,32,13);
+  clk.pushSprite(158,198);
   clk.deleteSprite();
   huminum = atoi(currentHumidity.substring(0,2).c_str());
   
@@ -424,7 +478,7 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
     humicol=0xFF0F;
   else
     humicol=0xF00F;
-  humidityWin();
+  humidityWinAt(164,224);
 
   clk.unloadFont();
   return true;

@@ -35,7 +35,7 @@ void loading(byte delayTime)//绘制进度条
 }
 
 //湿度图标显示函数
-void humidityWin()
+void humidityWinAt(int x, int y)
 {
   clk.setColorDepth(8);
   
@@ -44,12 +44,17 @@ void humidityWin()
   clk.fillSprite(0x0000);    //填充率
   clk.drawRoundRect(0,0,52,6,3,0xFFFF);  //空心圆角矩形  起始位x,y,长度，宽度，圆弧半径，颜色
   clk.fillRoundRect(1,1,huminum,4,2,humicol);   //实心圆角矩形
-  clk.pushSprite(45,222);  //窗口位置
+  clk.pushSprite(x,y);  //窗口位置
   clk.deleteSprite();
 }
 
+void humidityWin()
+{
+  humidityWinAt(45,222);
+}
+
 //温度图标显示函数
-void tempWin()
+void tempWinAt(int x, int y)
 {
   clk.setColorDepth(8);
   
@@ -57,6 +62,11 @@ void tempWin()
   clk.fillSprite(0x0000);    //填充率
   clk.drawRoundRect(0,0,52,6,3,0xFFFF);  //空心圆角矩形  起始位x,y,长度，宽度，圆弧半径，颜色
   clk.fillRoundRect(1,1,tempnum,4,2,tempcol);   //实心圆角矩形
-  clk.pushSprite(45,192);  //窗口位置
+  clk.pushSprite(x,y);  //窗口位置
   clk.deleteSprite();
+}
+
+void tempWin()
+{
+  tempWinAt(45,192);
 }

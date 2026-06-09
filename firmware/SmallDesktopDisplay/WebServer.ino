@@ -129,6 +129,10 @@ void handleconfig()
     msg = "<div class='ok'>Saved</div>";
   }
 
+  bool wifiConnected = WiFi.status() == WL_CONNECTED;
+  String wifiStatus = wifiConnected ? "已连接" : "未连接";
+  String ipAddress = wifiConnected ? WiFi.localIP().toString() : "--";
+
   //网页界面代码段
   String content = "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>";
         content += "<style>body{margin:0;background:#101418;color:#f6f7f8;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}";
@@ -136,10 +140,15 @@ void handleconfig()
         content += ".card{background:#1b2229;border:1px solid #303841;border-radius:8px;padding:14px;margin:12px 0}.card h3{margin:0 0 12px;font-size:19px}";
         content += ".item{margin-top:10px}.item:first-of-type{margin-top:0}.divider{border-top:1px solid #2b333b;padding-top:12px;margin-top:14px}";
         content += "label{display:block;color:#aeb6bf;font-size:13px;margin:0 0 6px}input{box-sizing:border-box;width:100%;font-size:16px;padding:11px;border-radius:6px;border:1px solid #46515c;background:#0f1419;color:#fff}";
-        content += ".row{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px}.stockrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.radio label{display:inline-block;margin:0 12px 0 0;color:#f6f7f8}.radio input{width:auto}.note{color:#aeb6bf;font-size:13px;line-height:1.45;margin:4px 0 0}";
-        content += "button,.btn{display:inline-block;text-align:center;text-decoration:none;color:#fff;background:#1e88e5;border:0;border-radius:6px;padding:11px 14px;font-size:16px;margin:6px 6px 0 0}.btn.alt{background:#37414b}.ok{background:#173d2b;color:#7ee2a8;border-radius:6px;padding:10px;margin-bottom:10px}@media(max-width:420px){.row,.stockrow{grid-template-columns:1fr}}</style>";
+        content += ".row{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px}.stockrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.inforow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.radio label{display:inline-block;margin:0 12px 0 0;color:#f6f7f8}.radio input{width:auto}.note{color:#aeb6bf;font-size:13px;line-height:1.45;margin:4px 0 0}.value{font-size:16px}";
+        content += "button,.btn{display:inline-block;text-align:center;text-decoration:none;color:#fff;background:#1e88e5;border:0;border-radius:6px;padding:11px 14px;font-size:16px;margin:6px 6px 0 0}.btn.alt{background:#37414b}.ok{background:#173d2b;color:#7ee2a8;border-radius:6px;padding:10px;margin-bottom:10px}@media(max-width:420px){.row,.stockrow,.inforow{grid-template-columns:1fr}}</style>";
         content += "</head><body><main class='wrap'><div class='title'>TinyTV 设置</div>";
         content += msg;
+        content += "<section class='card'><h3>设备信息</h3><div class='inforow'>";
+        content += "<div><label>Wi-Fi 状态</label><div class='value'>" + wifiStatus + "</div></div>";
+        content += "<div><label>IP 地址</label><div class='value'>" + ipAddress + "</div></div>";
+        content += "<div><label>固件版本</label><div class='value'>" + String(Version) + "</div></div>";
+        content += "</div></section>";
         content += "<form action='/' method='POST'>";
         content += "<section class='card'><h3>时钟页</h3><div class='item'><label>时间同步</label><p class='note'>NTP 自动同步，时区 UTC+8</p></div></section>";
         content += "<section class='card'><h3>天气页</h3>";

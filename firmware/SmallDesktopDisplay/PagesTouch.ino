@@ -268,23 +268,41 @@ void Page_renderSettings(bool force)
   tft.fillScreen(TFT_BLACK);
   Page_drawHeader(pageNames[PAGE_SETTINGS]);
 
-  IPAddress ip = WiFi.localIP();
-  clk.setColorDepth(8);
-  clk.loadFont(ZdyLwFont_20);
-  clk.createSprite(220, 166);
-  clk.fillSprite(TFT_BLACK);
-  clk.setTextDatum(ML_DATUM);
-  clk.setTextColor(TFT_WHITE, TFT_BLACK);
-  clk.drawString("Config", 8, 24);
-  clk.setTextColor(TFT_GREEN, TFT_BLACK);
-  clk.drawString("http://sd3.local", 8, 58);
-  clk.setTextColor(TFT_WHITE, TFT_BLACK);
-  clk.drawString(ip.toString(), 8, 92);
-  clk.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  clk.drawString("Double: refresh", 8, 130);
-  clk.pushSprite(10, 48);
-  clk.deleteSprite();
-  clk.unloadFont();
+  bool wifiConnected = WiFi.status() == WL_CONNECTED;
+  String ipText = wifiConnected ? WiFi.localIP().toString() : "--";
+
+  tft.setTextDatum(CC_DATUM);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString("Settings", 120, 28, 2);
+  tft.drawFastHLine(22, 46, 196, TFT_DARKGREY);
+
+  tft.drawRoundRect(10, 62, 220, 40, 6, TFT_DARKGREY);
+  tft.setTextDatum(ML_DATUM);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.drawString("Wi-Fi", 22, 82, 2);
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(wifiConnected ? TFT_GREEN : TFT_RED, TFT_BLACK);
+  tft.drawString(wifiConnected ? "Connected" : "Offline", 218, 82, 2);
+
+  tft.drawRoundRect(10, 112, 220, 40, 6, TFT_DARKGREY);
+  tft.setTextDatum(ML_DATUM);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.drawString("IP", 22, 132, 2);
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(wifiConnected ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
+  tft.drawString(ipText, 218, 132, 2);
+
+  tft.drawRoundRect(10, 162, 220, 40, 6, TFT_DARKGREY);
+  tft.setTextDatum(ML_DATUM);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.drawString("Firmware", 22, 182, 2);
+  tft.setTextDatum(MR_DATUM);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.drawString(Version, 218, 182, 2);
+
+  tft.setTextDatum(CC_DATUM);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.drawString("http://sd3.local", 120, 222, 2);
 }
 
 void Home_show()
