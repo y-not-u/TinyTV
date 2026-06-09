@@ -130,8 +130,7 @@ int updateweater_time = 10; //天气更新时间  X 分钟
 int LCD_Rotation = 0;   //LCD屏幕方向
 int LCD_BL_PWM = 100;//屏幕亮度20-100，默认100
 String cityCode = "101010100";  //天气城市代码 北京:101010100
-String stockCode = "AAPL";
-String stockCodes[2][3] = {
+char stockCodes[2][3][16] = {
   {"AAPL", "MSFT", "GOOG"},
   {"TSLA", "NVDA", "AMZN"}
 };
@@ -216,6 +215,7 @@ enum AppPage
 };
 
 AppPage currentPage = PAGE_CLOCK;
+AppPage previousPage = PAGE_CLOCK;
 const char* pageNames[] = {"Clock", "Stock", "Weather", "Settings"};
 const int pageCount = sizeof(pageNames) / sizeof(pageNames[0]);
 unsigned long pageRenderTime = 0;
@@ -247,7 +247,7 @@ void getCityWeater();
 bool weaterData(String *cityDZ,String *dataSK,String *dataFC);
 void saveStockConfig();
 void readStockConfig();
-String getStockCode(uint8_t group, uint8_t index);
+const char* getStockCode(uint8_t group, uint8_t index);
 void setStockCode(uint8_t group, uint8_t index, String code);
 uint8_t currentStockGroup();
 void Serial_set();
@@ -261,6 +261,7 @@ void Page_renderStock(bool force);
 void Page_renderWeather(bool force);
 void Page_renderSettings(bool force);
 void Page_drawHeader(const char* title);
+void Weather_reserveBuffers();
 #if imgAst_EN
 void imgAnim();
 #endif
@@ -300,6 +301,7 @@ void setup()
 {
   Serial.begin(115200);
   EEPROM.begin(1024);
+  Weather_reserveBuffers();
   readStockConfig();
   #if TOUCH_EN
   Touch_init();
