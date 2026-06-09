@@ -1,5 +1,7 @@
 # TinyTV Firmware Source
 
+[中文说明](README.zh-CN.md)
+
 ESP8266 TinyTV/weather-clock firmware source collected from the public LCSC OSHWHub project `https://oshwhub.com/q21182889/sd2`.
 
 License: GPL 3.0.
