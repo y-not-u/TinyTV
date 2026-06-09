@@ -196,14 +196,7 @@ void Page_render(bool force)
 
 void Page_drawHeader(const char* title)
 {
-  clk.setColorDepth(8);
-  clk.createSprite(240, 28);
-  clk.fillSprite(TFT_BLACK);
-  clk.setTextDatum(ML_DATUM);
-  clk.setTextColor(TFT_GREEN, TFT_BLACK);
-  clk.drawString(title, 8, 15, 2);
-  clk.pushSprite(0, 0);
-  clk.deleteSprite();
+  (void)title;
 }
 
 void Page_renderClock(bool force)
@@ -256,8 +249,6 @@ void Page_renderWeather(bool force)
     Page_drawHeader(pageNames[PAGE_WEATHER]);
     UpdateWeater_en = 1;
     weaterTime = 0;
-    TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));
-    TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));
   }
   LCD_reflash(force ? 1 : 0);
 }

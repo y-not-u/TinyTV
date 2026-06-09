@@ -51,7 +51,7 @@ void Serial_set()
         //   delay(5);
         // }
         
-        cityCode = CityCODE;
+        cityCode = String(CityC);
         
         if(cityCode == "0")
         {
@@ -83,8 +83,6 @@ void Serial_set()
         tft.fillScreen(0x0000);
         LCD_reflash(1);//屏幕刷新程序
         UpdateWeater_en = 1;
-        TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));  //温度图标
-        TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));  //湿度图标
 
         Serial.print("屏幕方向设置为：");
         Serial.println(RoSet);

@@ -156,7 +156,7 @@ void saveParamCallback(){
     //   CCODE += EEPROM.read(CC_addr+cnum-1); 
     //   delay(5);
     // }
-    cityCode = cc;
+    cityCode = String(cc);
   }
   //屏幕方向
   Serial.print("LCD_Rotation = ");

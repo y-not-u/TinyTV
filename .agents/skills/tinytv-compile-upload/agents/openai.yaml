@@ -1,0 +1,7 @@
+interface:
+  display_name: "TinyTV Compile Upload"
+  short_description: "Build and flash the TinyTV ESP8266 firmware."
+  default_prompt: "Use $tinytv-compile-upload to compile and flash the TinyTV firmware."
+
+policy:
+  allow_implicit_invocation: true

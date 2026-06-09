@@ -13,6 +13,8 @@ This repository contains ESP8266 TinyTV/weather-clock firmware source. The main 
 
 Use the Arduino settings already present in `.vscode/arduino.json`: board `nodemcuv2`, flash layout `eesz=4M2M`, and upload baud `921600`.
 
+If `arduino-cli` is not found in the environment `PATH`, look for it inside the installed Arduino app before reporting that compilation is unavailable.
+
 ## Coding Style & Naming Conventions
 
 Keep Arduino/C++ files consistent with the existing style: 2-space indentation in new blocks where practical, braces on the same line for functions/control flow when editing nearby code, and descriptive globals matching current names such as `LCD_BL_PWM`, `cityCode`, and `updateweater_time`. Keep firmware edits inside `firmware/SmallDesktopDisplay/`. Do not hand-edit generated image/font headers unless regenerating the source asset.

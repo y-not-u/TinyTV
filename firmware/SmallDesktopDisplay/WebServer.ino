@@ -64,8 +64,6 @@ void handleconfig()
       tft.fillScreen(0x0000);
       Page_render(true);
       UpdateWeater_en = 1;
-      TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));  //温度图标
-      TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));  //湿度图标
     }
     Serial.print("DHT Sensor Enable： ");
     Serial.println(DHT_img_flag);
@@ -81,8 +79,6 @@ void handleconfig()
       tft.fillScreen(0x0000);
       Page_render(true);
       UpdateWeater_en = 1;
-      TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));  //温度图标
-      TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));  //湿度图标
     }
     Serial.print("LCD Rotation:");
     Serial.println(LCD_Rotation);
