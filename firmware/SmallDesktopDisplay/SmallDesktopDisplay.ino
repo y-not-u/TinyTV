@@ -189,6 +189,11 @@ ESP8266WebServer server(80);// 建立esp8266网站服务器对象
 
 //NTP服务器参数
 static const char ntpServerName[] = "ntp6.aliyun.com";
+static const char* ntpServerNames[] = {
+  "ntp.aliyun.com",
+  "ntp6.aliyun.com",
+  "pool.ntp.org"
+};
 const int timeZone = 8;     //东八区
 
 //wifi连接UDP设置参数
@@ -213,11 +218,13 @@ unsigned long pageRenderTime = 0;
 
 //函数声明
 time_t getNtpTime();
+bool syncClock(uint8_t retryCount);
 void digitalClockDisplay(int reflash_en);
 void printDigits(int digits);
 String num2str(int digits);
 void sendNTPpacket(IPAddress &address);
 void LCD_reflash(int en);
+void Weather_drawDetails(const String details[], int detailCount);
 void savewificonfig();
 void readwificonfig();
 void deletewificonfig();
@@ -623,6 +630,10 @@ void Page_renderClock(bool force)
     prevDisplay = 0;
   }
   digitalClockDisplay(force ? 1 : 0);
+#if imgAst_EN
+  if(DHT_img_flag == 0)
+    imgAnim();
+#endif
 }
 
 void Page_renderStock(bool force)
@@ -656,16 +667,6 @@ void Page_renderWeather(bool force)
     tft.fillScreen(TFT_BLACK);
     UpdateWeater_en = 1;
     weaterTime = 0;
-    clk.setColorDepth(8);
-    clk.loadFont(ZdyLwFont_20);
-    clk.createSprite(180, 32);
-    clk.fillSprite(TFT_BLACK);
-    clk.setTextDatum(CC_DATUM);
-    clk.setTextColor(TFT_GREEN, TFT_BLACK);
-    clk.drawString("Loading weather...", 90, 17);
-    clk.pushSprite(30, 88);
-    clk.deleteSprite();
-    clk.unloadFont();
     TJpgDec.drawJpg(15,183,temperature, sizeof(temperature));
     TJpgDec.drawJpg(15,213,humidity, sizeof(humidity));
     if(WiFi.status() == WL_CONNECTED)
@@ -1473,6 +1474,7 @@ void setup()
   Serial.println("等待同步...");
   setSyncProvider(getNtpTime);
   setSyncInterval(300);
+  syncClock(5);
 
   
 
@@ -1549,12 +1551,7 @@ void LCD_reflash(int en)
     if(DHT_img_flag != 0)
     IndoorTem();
 #endif
-    scrollBanner();
   }
-#if imgAst_EN
-  if(DHT_img_flag == 0)
-  imgAnim();
-#endif
 
 
   if(millis() - weaterTime > (60000*updateweater_time) || en == 1 || UpdateWeater_en != 0){ //10分钟更新一次天气
@@ -1571,8 +1568,7 @@ void LCD_reflash(int en)
       getCityWeater();
       if(UpdateWeater_en != 0) UpdateWeater_en = 0;
       weaterTime = millis();
-      // while(!getNtpTime());
-      getNtpTime();
+      syncClock(3);
       #if !WebSever_EN
       WiFi.forceSleepBegin(); // Wifi Off
       Serial.println("WIFI休眠......");
@@ -1682,6 +1678,24 @@ void getCityWeater(){
 
 
 String scrollText[7];//天气信息存储
+
+void Weather_drawDetails(const String details[], int detailCount)
+{
+  clk.setColorDepth(8);
+  clk.loadFont(ZdyLwFont_20);
+  clk.createSprite(150, 126);
+  clk.fillSprite(bgColor);
+  clk.setTextWrap(false);
+  clk.setTextDatum(ML_DATUM);
+  clk.setTextColor(TFT_WHITE, bgColor);
+  for(int i=0; i<detailCount; i++)
+  {
+    clk.drawString(details[i], 0, 12 + i * 20);
+  }
+  clk.pushSprite(10, 48);
+  clk.deleteSprite();
+  clk.unloadFont();
+}
 
 //天气信息写到屏幕上
 void weaterData(String *cityDZ,String *dataSK,String *dataFC)
@@ -1810,10 +1824,11 @@ void weaterData(String *cityDZ,String *dataSK,String *dataFC)
   
   scrollText[4] = "最低温度"+fc["fd"].as<String>()+"℃";
   scrollText[5] = "最高温度"+fc["fc"].as<String>()+"℃";
-  
+
   //Serial.println(scrollText[0]);
-  
+
   clk.unloadFont();
+  Weather_drawDetails(scrollText, 6);
 }
 
 int currentIndex = 0;
@@ -1975,30 +1990,49 @@ time_t getNtpTime()
 
   while (Udp.parsePacket() > 0) ; // discard any previously received packets
   //Serial.println("Transmit NTP Request");
-  // get a random server from the pool
-  WiFi.hostByName(ntpServerName, ntpServerIP);
-  //Serial.print(ntpServerName);
-  //Serial.print(": ");
-  //Serial.println(ntpServerIP);
-  sendNTPpacket(ntpServerIP);
-  uint32_t beginWait = millis();
-  while (millis() - beginWait < 1500) {
-    int size = Udp.parsePacket();
-    if (size >= NTP_PACKET_SIZE) {
-      Serial.println("Receive NTP Response");
-      Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
-      unsigned long secsSince1900;
-      // convert four bytes starting at location 40 to a long integer
-      secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
-      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
-      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
-      secsSince1900 |= (unsigned long)packetBuffer[43];
-      //Serial.println(secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR);
-      return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+  for(uint8_t serverIndex=0; serverIndex < (sizeof(ntpServerNames) / sizeof(ntpServerNames[0])); serverIndex++)
+  {
+    WiFi.hostByName(ntpServerNames[serverIndex], ntpServerIP);
+    if(ntpServerIP == INADDR_NONE)
+      continue;
+    sendNTPpacket(ntpServerIP);
+    uint32_t beginWait = millis();
+    while (millis() - beginWait < 1500) {
+      int size = Udp.parsePacket();
+      if (size >= NTP_PACKET_SIZE) {
+        Serial.print("Receive NTP Response: ");
+        Serial.println(ntpServerNames[serverIndex]);
+        Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
+        unsigned long secsSince1900;
+        // convert four bytes starting at location 40 to a long integer
+        secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
+        secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
+        secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
+        secsSince1900 |= (unsigned long)packetBuffer[43];
+        //Serial.println(secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR);
+        return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+      }
     }
   }
   Serial.println("No NTP Response :-(");
   return 0; // 无法获取时间时返回0
+}
+
+bool syncClock(uint8_t retryCount)
+{
+  for(uint8_t i=0; i<retryCount; i++)
+  {
+    time_t ntpTime = getNtpTime();
+    if(ntpTime != 0)
+    {
+      setTime(ntpTime);
+      Serial.print("Time synced: ");
+      Serial.println(ntpTime);
+      return true;
+    }
+    delay(300);
+  }
+  return false;
 }
 
 // 向NTP服务器发送请求
