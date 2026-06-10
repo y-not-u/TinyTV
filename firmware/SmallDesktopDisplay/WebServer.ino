@@ -140,6 +140,9 @@ void handleconfig()
         setStockCode(1, i, server.arg(nightName));
     }
     saveStockConfig();
+    Stock_invalidate();
+    if(currentPage == PAGE_STOCK)
+      Page_render(true);
     Serial.println("Stock Codes:");
     for(uint8_t group = 0; group < 2; group++)
     {
@@ -196,7 +199,7 @@ void handleconfig()
   for(uint8_t i=0;i<3;i++) Web_sendStockInput(0, i);
   Web_sendP(PSTR("</div></div><div class='item'><label>晚上股票 18:00-05:59</label><div class='stockrow'>"));
   for(uint8_t i=0;i<3;i++) Web_sendStockInput(1, i);
-  Web_sendP(PSTR("</div></div></section><section class='card'><h3>设置页</h3><div class='item'><label>亮度 20-100</label><input type='number' name='web_bl' min='20' max='100' value='"));
+  Web_sendP(PSTR("</div><p class='note'>指数或重码代码请带市场后缀，例如中证A500填 000510.SH；历史保存的 000510 会自动按中证A500处理。</p></div></section><section class='card'><h3>设置页</h3><div class='item'><label>亮度 20-100</label><input type='number' name='web_bl' min='20' max='100' value='"));
   Web_sendInt(LCD_BL_PWM);
   Web_sendP(PSTR("'></div><div class='item'><label>屏幕方向</label><div class='radio'>"));
   for(int i=0;i<4;i++)

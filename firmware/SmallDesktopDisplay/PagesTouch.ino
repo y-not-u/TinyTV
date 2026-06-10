@@ -219,30 +219,7 @@ void Page_renderClock(bool force)
 
 void Page_renderStock(bool force)
 {
-  bool pageChanged = previousPage != currentPage;
-  if(!force && !pageChanged && millis() - pageRenderTime < 5000)
-    return;
-  previousPage = currentPage;
-  pageRenderTime = millis();
-  tft.fillScreen(TFT_BLACK);
-  Page_drawHeader(pageNames[PAGE_STOCK]);
-
-  tft.loadFont(ZdyLwFont_20);
-  tft.setTextDatum(CC_DATUM);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  uint8_t stockGroup = currentStockGroup();
-  tft.drawString(stockGroup == 0 ? "白天股票" : "晚上股票", 120, 78);
-  tft.setTextColor(TFT_GREEN, TFT_BLACK);
-  for(uint8_t i = 0; i < 3; i++)
-  {
-    const char* code = getStockCode(stockGroup, i);
-    if(code[0] == '\0')
-      code = "--";
-    tft.drawString(code, 120, 112 + (i * 28));
-  }
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString(stockGroup == 0 ? "06:00-17:59" : "18:00-05:59", 120, 194);
-  tft.unloadFont();
+  Stock_renderPage(force);
 }
 
 void Page_renderWeather(bool force)

@@ -262,6 +262,9 @@ void Page_renderWeather(bool force);
 void Page_renderSettings(bool force);
 void Page_drawHeader(const char* title);
 void Weather_reserveBuffers();
+void Stock_init();
+void Stock_invalidate();
+void Stock_renderPage(bool force);
 #if imgAst_EN
 void imgAnim();
 #endif
@@ -302,6 +305,7 @@ void setup()
   Serial.begin(115200);
   EEPROM.begin(1024);
   Weather_reserveBuffers();
+  Stock_init();
   readStockConfig();
   #if TOUCH_EN
   Touch_init();
