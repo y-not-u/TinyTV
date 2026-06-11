@@ -98,15 +98,6 @@ void LCD_reflash(int en)
   if(currentPage != PAGE_WEATHER)
     return;
   
-  //两秒钟更新一次
-  if(second()%2 ==0&& prevTime == 0 || en == 1){
-#if DHT_EN
-    if(DHT_img_flag != 0)
-    IndoorTem();
-#endif
-  }
-
-
   if(millis() - weaterTime > (60000*updateweater_time) || en == 1 || UpdateWeater_en != 0){ //10分钟更新一次天气
     if(Wifi_en == 0)
     {
@@ -323,6 +314,125 @@ void Weather_drawDetails(const String details[], int detailCount)
     ChineseFont_drawString(20, 109 + i * 18, details[i].c_str(), TFT_WHITE, bgColor);
 }
 
+int16_t Weather_mixedTextWidth(const char* str, bool small)
+{
+  int16_t width = 0;
+  uint8_t b;
+  while((b = (uint8_t)*str) != 0)
+  {
+    if(b < 0x80)
+    {
+      width += small ? 6 : tft.textWidth(String((char)b), 2);
+      str++;
+    }
+    else if((b & 0xE0) == 0xC0 && str[1])
+    {
+      width += small ? 15 : CHINESE_FONT_W;
+      str += 2;
+    }
+    else if((b & 0xF0) == 0xE0 && str[1] && str[2])
+    {
+      width += small ? 15 : CHINESE_FONT_W;
+      str += 3;
+    }
+    else
+    {
+      str++;
+    }
+  }
+  return width;
+}
+
+void Weather_drawStringCentered(int16_t centerX, int16_t y, const String &text, uint16_t fg, uint16_t bg, bool small)
+{
+  int16_t x = centerX - Weather_mixedTextWidth(text.c_str(), small) / 2;
+  if(x < 0)
+    x = 0;
+
+  if(small)
+    ChineseFont_drawStringSmall(x, y, text.c_str(), fg, bg);
+  else
+    ChineseFont_drawString(x, y, text.c_str(), fg, bg);
+}
+
+void Weather_drawPill(int16_t x, int16_t y, int16_t w, const String &text, uint16_t fillColor, uint16_t textColor)
+{
+  tft.fillRoundRect(x, y, w, 22, 5, fillColor);
+  Weather_drawStringCentered(x + w / 2, y + 4, text, textColor, fillColor, true);
+}
+
+String Weather_unitC(String value)
+{
+  value.trim();
+  if(value.length() == 0 || value == "null")
+    return "--C";
+
+  return value + "C";
+}
+
+void Weather_drawDegreeC(int16_t x, int16_t y, uint16_t color)
+{
+  tft.drawCircle(x + 3, y + 4, 3, color);
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextColor(color, bgColor);
+  tft.drawString("C", x + 10, y + 2, 2);
+}
+
+void Weather_drawTemperatureDigits(const String &value)
+{
+  String text = value;
+  text.trim();
+  if(text.length() == 0 || text == "null")
+    text = "--";
+
+  uint8_t digitCount = 0;
+  bool negative = text.charAt(0) == '-';
+  for(uint8_t i = negative ? 1 : 0; i < text.length(); i++)
+  {
+    if(isDigit(text.charAt(i)))
+      digitCount++;
+  }
+
+  if(digitCount == 0)
+  {
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(TFT_WHITE, bgColor);
+    tft.drawString("--", 146, 91, 2);
+    Weather_drawDegreeC(170, 86, TFT_WHITE);
+    return;
+  }
+
+  int16_t width = digitCount * 36 + (negative ? 18 : 0) + 28;
+  int16_t x = 118 + (112 - width) / 2;
+  if(x < 100)
+    x = 100;
+
+  if(negative)
+  {
+    tft.fillRoundRect(x, 104, 14, 4, 2, TFT_WHITE);
+    x += 18;
+  }
+
+  for(uint8_t i = negative ? 1 : 0; i < text.length(); i++)
+  {
+    char c = text.charAt(i);
+    if(!isDigit(c))
+      continue;
+
+    dig.printfW3660(x, 76, c - '0');
+    x += 36;
+  }
+
+  Weather_drawDegreeC(x + 1, 82, TFT_WHITE);
+}
+
+void Weather_drawInfoLine(int16_t y, const String &label, const String &value)
+{
+  tft.drawFastHLine(18, y - 6, 204, TFT_DARKGREY);
+  ChineseFont_drawStringSmall(20, y, label.c_str(), TFT_DARKGREY, bgColor);
+  ChineseFont_drawStringSmall(64, y, value.c_str(), TFT_WHITE, bgColor);
+}
+
 //天气信息写到屏幕上
 bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
 {
@@ -338,7 +448,10 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   JsonObject sk = doc.as<JsonObject>();
 
   String cityName = sk["cityname"].as<String>();
-  String currentTemp = Weather_withUnit(sk["temp"].as<String>(), "℃");
+  String currentTemp = sk["temp"].as<String>();
+  currentTemp.trim();
+  if(currentTemp.length() == 0 || currentTemp == "null")
+    currentTemp = "--";
   String currentHumidity = sk["SD"].as<String>();
   currentHumidity.trim();
   if(currentHumidity.length() == 0 || currentHumidity == "null")
@@ -383,46 +496,35 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
     return false;
   }
   JsonObject fc = doc.as<JsonObject>();
-  String lowTemp = Weather_withUnit(fc["fd"].as<String>(), "℃");
-  String highTemp = Weather_withUnit(fc["fc"].as<String>(), "℃");
+  String lowTemp = fc["fd"].as<String>();
+  String highTemp = fc["fc"].as<String>();
+  lowTemp.trim();
+  highTemp.trim();
 
   tft.fillScreen(bgColor);
   
-  /***绘制相关文字***/
-  //城市名称 (draw directly on tft with Chinese bitmap font)
-  ChineseFont_drawString(120 - strlen(cityName.c_str()) * 8, 14, cityName.c_str(), TFT_WHITE, bgColor);
+  Weather_drawStringCentered(120, 10, cityName, TFT_WHITE, bgColor, false);
+  Weather_drawStringCentered(120, 35, currentWeather, TFT_WHITE, bgColor, true);
+  Weather_drawPill(84, 56, 72, aqiTxt, pm25BgColor, TFT_BLACK);
 
-  //空气指数
-  clk.setColorDepth(8);
-  clk.createSprite(72, 26);
-  clk.fillSprite(bgColor);
-  clk.fillRoundRect(2,1,68,24,4,pm25BgColor);
-  clk.setTextWrap(false);
-  clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(0x0000);
-  clk.drawString(aqiTxt,36,14);
-  clk.pushSprite(84, 54);
-  clk.deleteSprite();
-
-  //天气图标
-  Weather_drawIconScaled(75,92,weatherCode);
+  // Draw the weather icon at its native 60x60 size. The old 1.5x software
+  // scaler made the JPEG icon look blocky on the physical screen.
+  TJpgDec.setCallback(tft_output);
+  wrat.printfweather(28, 76, weatherCode);
+  Weather_drawTemperatureDigits(currentTemp);
 
   scrollText[0] = "空气质量 " + aqiTxt;
   scrollText[1] = "风向 " + windText;
   scrollText[2] = "今日 " + todayWeather;
-  scrollText[3] = "温度 " + lowTemp + "-" + highTemp;
-  scrollText[4] = "最高温度 " + highTemp;
+  scrollText[3] = "温度 " + Weather_unitC(lowTemp) + "-" + Weather_unitC(highTemp);
+  scrollText[4] = "最高温度 " + Weather_unitC(highTemp);
   scrollText[5] = "湿度 " + currentHumidity;
 
-  //温度
-  TJpgDec.drawJpg(35,198,temperature, sizeof(temperature));
-  clk.createSprite(64, 24);
-  clk.fillSprite(bgColor);
-  clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_WHITE, bgColor);
-  clk.drawString(currentTemp,32,13);
-  clk.pushSprite(61,198);
-  clk.deleteSprite();
+  Weather_drawInfoLine(152, "今日", todayWeather);
+  Weather_drawInfoLine(176, "风力", windText);
+  Weather_drawInfoLine(200, "温度", Weather_unitC(lowTemp) + "-" + Weather_unitC(highTemp));
+  Weather_drawInfoLine(224, "湿度", currentHumidity);
+
   tempnum = currentTempValue;
   tempnum = tempnum+10;
   if(tempnum<10)
@@ -440,31 +542,6 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
     tempcol=0xF00F;
     tempnum=50;
   }
-  tempWinAt(67,224);
-  
-  //湿度
-  TJpgDec.drawJpg(132,198,humidity, sizeof(humidity));
-  clk.createSprite(64, 24);
-  clk.fillSprite(bgColor);
-  clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_WHITE, bgColor);
-  clk.drawString(currentHumidity,32,13);
-  clk.pushSprite(158,198);
-  clk.deleteSprite();
-  huminum = atoi(currentHumidity.substring(0,2).c_str());
-  
-  if(huminum>90)
-    humicol=0x00FF;
-  else if(huminum>70)
-    humicol=0x0AFF;
-  else if(huminum>40)
-    humicol=0x0F0F;
-  else if(huminum>20)
-    humicol=0xFF0F;
-  else
-    humicol=0xF00F;
-  humidityWinAt(164,224);
-
   return true;
 }
 
