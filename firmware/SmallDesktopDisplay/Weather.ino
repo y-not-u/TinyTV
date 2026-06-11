@@ -318,15 +318,9 @@ void Weather_showStatus(const char* title, const char* message)
 void Weather_drawDetails(const String details[], int detailCount)
 {
   tft.fillRect(17, 104, 206, 82, bgColor);
-  tft.loadFont(ZdyLwFont_20);
-  tft.setTextWrap(false);
-  tft.setTextDatum(CC_DATUM);
-  tft.setTextColor(TFT_WHITE, bgColor);
-  for(int i=0; i<detailCount; i++)
-  {
-    tft.drawString(details[i], 120, 116 + i * 20);
-  }
-  tft.unloadFont();
+  ChineseFont_drawString(20, 109, details[0].c_str(), TFT_WHITE, bgColor);
+  for(int i=1; i<detailCount; i++)
+    ChineseFont_drawString(20, 109 + i * 18, details[i].c_str(), TFT_WHITE, bgColor);
 }
 
 //天气信息写到屏幕上
@@ -395,22 +389,11 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   tft.fillScreen(bgColor);
   
   /***绘制相关文字***/
-  clk.setColorDepth(8);
-  clk.loadFont(ZdyLwFont_20);
-
-  //城市名称
-  clk.createSprite(200, 44);
-  clk.fillSprite(bgColor);
-  clk.setTextWrap(false);
-  clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_WHITE, bgColor);
-  clk.setTextSize(2);
-  clk.drawString(cityName, 100, 23);
-  clk.setTextSize(1);
-  clk.pushSprite(20, 8);
-  clk.deleteSprite();
+  //城市名称 (draw directly on tft with Chinese bitmap font)
+  ChineseFont_drawString(120 - strlen(cityName.c_str()) * 8, 14, cityName.c_str(), TFT_WHITE, bgColor);
 
   //空气指数
+  clk.setColorDepth(8);
   clk.createSprite(72, 26);
   clk.fillSprite(bgColor);
   clk.fillRoundRect(2,1,68,24,4,pm25BgColor);
@@ -430,7 +413,6 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   scrollText[3] = "温度 " + lowTemp + "-" + highTemp;
   scrollText[4] = "最高温度 " + highTemp;
   scrollText[5] = "湿度 " + currentHumidity;
-  clk.loadFont(ZdyLwFont_20);
 
   //温度
   TJpgDec.drawJpg(35,198,temperature, sizeof(temperature));
@@ -483,37 +465,21 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
     humicol=0xF00F;
   humidityWinAt(164,224);
 
-  clk.unloadFont();
   return true;
 }
 
 int currentIndex = 0;
-TFT_eSprite clkb = TFT_eSprite(&tft);
 
 void scrollBanner(){
-  //if(millis() - prevTime > 2333) //3秒切换一次
-//  if(second()%2 ==0&& prevTime == 0)
-//  { 
     if(scrollText[currentIndex])
     {
-      clkb.setColorDepth(8);
-      clkb.loadFont(ZdyLwFont_20);
-      clkb.createSprite(150, 30); 
-      clkb.fillSprite(bgColor);
-      clkb.setTextWrap(false);
-      clkb.setTextDatum(CC_DATUM);
-      clkb.setTextColor(TFT_WHITE, bgColor); 
-      clkb.drawString(scrollText[currentIndex],74, 16);
-      clkb.pushSprite(10,45);
-       
-      clkb.deleteSprite();
-      clkb.unloadFont();
-      
+      tft.fillRect(10, 45, 220, 18, bgColor);
+      ChineseFont_drawString(14, 45, scrollText[currentIndex].c_str(), TFT_WHITE, bgColor);
+
       if(currentIndex>=5)
-        currentIndex = 0;  //回第一个
+        currentIndex = 0;
       else
-        currentIndex += 1;  //准备切换到下一个        
+        currentIndex += 1;
     }
     prevTime = 1;
-//  }
 }

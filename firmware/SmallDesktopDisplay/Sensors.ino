@@ -4,10 +4,9 @@ void IndoorTem()
 {
   float t = dht.readTemperature();
   float h = dht.readHumidity();
-  String s = "内温";
+  String s = "IN";
    /***绘制相关文字***/
   clk.setColorDepth(8);
-  clk.loadFont(ZdyLwFont_20);
   
   //位置
   clk.createSprite(58, 30);

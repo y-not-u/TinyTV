@@ -88,7 +88,8 @@ DHT dht(DHTPIN,DHTTYPE);
 /* *****************************************************************
  *  字库、图片库
  * *****************************************************************/
-#include "font/ZdyLwFont_20.h"
+#include "ChineseFont.h"
+//#include "font/ZdyLwFont_20.h"
 #include "img/misaka.h"
 #include "img/temperature.h"
 #include "img/humidity.h"

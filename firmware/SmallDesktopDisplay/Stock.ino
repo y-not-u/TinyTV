@@ -7,6 +7,7 @@ struct StockQuote
 {
   char code[16];
   char symbol[16];
+  char name[32];
   float price;
   float change;
   float changePercent;
@@ -14,8 +15,21 @@ struct StockQuote
 };
 
 StockQuote stockQuotes[3];
+char stockRenderedPrice[3][18];
+char stockRenderedPercent[3][18];
+bool stockRenderedValid[3];
 unsigned long stockLastFetch = 0;
 uint8_t stockLastGroup = 255;
+
+void Stock_clearRenderedValues()
+{
+  for(uint8_t i = 0; i < 3; i++)
+  {
+    stockRenderedPrice[i][0] = '\0';
+    stockRenderedPercent[i][0] = '\0';
+    stockRenderedValid[i] = false;
+  }
+}
 
 void Stock_init()
 {
@@ -23,11 +37,13 @@ void Stock_init()
   {
     stockQuotes[i].code[0] = '\0';
     stockQuotes[i].symbol[0] = '\0';
+    stockQuotes[i].name[0] = '\0';
     stockQuotes[i].price = 0;
     stockQuotes[i].change = 0;
     stockQuotes[i].changePercent = 0;
     stockQuotes[i].valid = false;
   }
+  Stock_clearRenderedValues();
 }
 
 void Stock_invalidate()
@@ -133,6 +149,8 @@ bool Stock_fetchQuote(const char* code, uint8_t index)
 
   String apiSymbol = data["symbol"] | code;
   apiSymbol.toCharArray(quote->symbol, sizeof(quote->symbol));
+  String apiName = data["name"] | "";
+  apiName.toCharArray(quote->name, sizeof(quote->name));
   quote->price = data["price"] | 0.0;
   quote->change = data["change"] | 0.0;
   quote->changePercent = data["change_percent"] | 0.0;
@@ -156,10 +174,10 @@ void Stock_drawHeaderRow()
 {
   tft.setTextDatum(ML_DATUM);
   tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString("名称代码", 10, 14, 2);
+  tft.drawString("Code", 10, 14, 2);
   tft.setTextDatum(MR_DATUM);
-  tft.drawString("最新价", 156, 14, 2);
-  tft.drawString("涨跌幅", 230, 14, 2);
+  tft.drawString("Price", 158, 14, 2);
+  tft.drawString("Chg%", 226, 14, 2);
   tft.drawFastHLine(8, 28, 224, TFT_DARKGREY);
 }
 
@@ -168,28 +186,48 @@ uint16_t Stock_blockColor()
   return tft.color565(12, 18, 24);
 }
 
-void Stock_drawQuoteValues(uint8_t index)
+void Stock_drawQuoteValues(uint8_t index, bool force)
 {
   StockQuote *quote = &stockQuotes[index];
   int y = 36 + index * 66;
   uint16_t blockColor = Stock_blockColor();
   uint16_t mutedColor = tft.color565(120, 128, 136);
   uint16_t valueColor = quote->changePercent < 0 ? TFT_GREEN : TFT_RED;
+  String priceText = quote->valid ? Stock_formatFloat(quote->price, 2) : "";
+  String percentText = quote->valid ? Stock_formatPercent(quote->changePercent) : "";
 
-  tft.fillRect(92, y + 8, 136, 40, blockColor);
-  tft.setTextWrap(false);
-  tft.setTextDatum(MR_DATUM);
+  if(!force &&
+    stockRenderedValid[index] == quote->valid &&
+    priceText == stockRenderedPrice[index] &&
+    percentText == stockRenderedPercent[index])
+    return;
+
+  TFT_eSprite valueSprite = TFT_eSprite(&tft);
+  valueSprite.setColorDepth(8);
+  valueSprite.createSprite(136, 40);
+  valueSprite.fillSprite(blockColor);
+  valueSprite.setTextWrap(false);
+  valueSprite.setTextDatum(MR_DATUM);
 
   if(!quote->valid)
   {
-    tft.setTextColor(mutedColor, blockColor);
-    tft.drawString("No data", 224, y + 28, 2);
-    return;
+    valueSprite.setTextColor(mutedColor, blockColor);
+    valueSprite.drawString("No data", 132, 20, 2);
+    stockRenderedPrice[index][0] = '\0';
+    stockRenderedPercent[index][0] = '\0';
+  }
+  else
+  {
+    valueSprite.setTextColor(valueColor, blockColor);
+    valueSprite.drawString(priceText, 66, 20, 2);
+    valueSprite.drawString(percentText, 134, 20, 2);
+    priceText.toCharArray(stockRenderedPrice[index], sizeof(stockRenderedPrice[index]));
+    percentText.toCharArray(stockRenderedPercent[index], sizeof(stockRenderedPercent[index]));
   }
 
-  tft.setTextColor(valueColor, blockColor);
-  tft.drawString(Stock_formatFloat(quote->price, 2), 158, y + 28, 2);
-  tft.drawString(Stock_formatPercent(quote->changePercent), 226, y + 28, 2);
+  stockRenderedValid[index] = quote->valid;
+  valueSprite.pushSprite(92, y + 8);
+  valueSprite.deleteSprite();
 }
 
 void Stock_drawQuoteBlock(uint8_t index)
@@ -203,13 +241,12 @@ void Stock_drawQuoteBlock(uint8_t index)
   tft.setTextWrap(false);
 
   tft.setTextDatum(ML_DATUM);
-  tft.setTextColor(TFT_WHITE, blockColor);
-  tft.drawString(quote->symbol[0] == '\0' ? quote->code : quote->symbol, 14, y + 17, 2);
+  ChineseFont_drawStringSmall(14, y + 11, quote->name[0] == '\0' ? (quote->symbol[0] == '\0' ? quote->code : quote->symbol) : quote->name, TFT_WHITE, blockColor);
 
   tft.setTextColor(mutedColor, blockColor);
-  tft.drawString(quote->code[0] == '\0' ? "--" : quote->code, 14, y + 39, 2);
+  tft.drawString(quote->symbol[0] == '\0' ? "--" : quote->symbol, 14, y + 39, 2);
 
-  Stock_drawQuoteValues(index);
+  Stock_drawQuoteValues(index, true);
 }
 
 void Stock_renderPage(bool force)
@@ -261,7 +298,7 @@ void Stock_renderPage(bool force)
   {
     for(uint8_t i = 0; i < 3; i++)
     {
-      Stock_drawQuoteValues(i);
+      Stock_drawQuoteValues(i, false);
     }
   }
 }

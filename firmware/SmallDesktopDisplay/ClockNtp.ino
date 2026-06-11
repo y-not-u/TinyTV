@@ -1,5 +1,5 @@
 void digitalClockDisplay(int reflash_en)
-{ 
+{
   int timey=82;
   if(hour()!=Hour_sign || reflash_en == 1)//时钟刷新
   {
@@ -19,12 +19,11 @@ void digitalClockDisplay(int reflash_en)
     dig.printfW1830(202,timey+30,second()%10);
     Second_sign = second();
   }
-  
+
   if(reflash_en == 1) reflash_en = 0;
   /***日期****/
   clk.setColorDepth(8);
-  clk.loadFont(ZdyLwFont_20);
-   
+
   //星期
   clk.createSprite(58, 30);
   clk.fillSprite(bgColor);
@@ -33,33 +32,34 @@ void digitalClockDisplay(int reflash_en)
   clk.drawString(week(),29,16);
   clk.pushSprite(102,150);
   clk.deleteSprite();
-  
+
   //月日
   clk.createSprite(95, 30);
   clk.fillSprite(bgColor);
   clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(TFT_WHITE, bgColor);  
+  clk.setTextColor(TFT_WHITE, bgColor);
   clk.drawString(monthDay(),49,16);
   clk.pushSprite(5,150);
   clk.deleteSprite();
-  
-  clk.unloadFont();
+
   /***日期****/
 }
 
 //星期
 String week()
 {
-  String wk[7] = {"日","一","二","三","四","五","六"};
-  String s = "周" + wk[weekday()-1];
-  return s;
+  String wk[7] = {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+  return wk[weekday()-1];
 }
 
 //月日
 String monthDay()
 {
-  String s = String(month());
-  s = s + "月" + day() + "日";
+  String m[12] = {"Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+  String s = m[month()-1] + " " + String(day());
+  s += (day() == 1 || day() == 21 || day() == 31) ? "st" :
+       (day() == 2 || day() == 22) ? "nd" :
+       (day() == 3 || day() == 23) ? "rd" : "th";
   return s;
 }
 
