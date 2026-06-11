@@ -355,10 +355,13 @@ void Weather_drawStringCentered(int16_t centerX, int16_t y, const String &text, 
     ChineseFont_drawString(x, y, text.c_str(), fg, bg);
 }
 
-void Weather_drawPill(int16_t x, int16_t y, int16_t w, const String &text, uint16_t fillColor, uint16_t textColor)
+int Weather_roundTemperature(const String &value)
 {
-  tft.fillRoundRect(x, y, w, 22, 5, fillColor);
-  Weather_drawStringCentered(x + w / 2, y + 4, text, textColor, fillColor, true);
+  float temp = value.toFloat();
+  if(temp >= 0)
+    return (int)(temp + 0.5f);
+
+  return (int)(temp - 0.5f);
 }
 
 String Weather_unitC(String value)
@@ -367,7 +370,40 @@ String Weather_unitC(String value)
   if(value.length() == 0 || value == "null")
     return "--C";
 
-  return value + "C";
+  return String(Weather_roundTemperature(value)) + "C";
+}
+
+String Weather_rangeC(String low, String high)
+{
+  return Weather_unitC(low) + " / " + Weather_unitC(high);
+}
+
+void Weather_parseSunTimes(String combined, String fallbackSunset, String *sunriseText, String *sunsetText)
+{
+  combined.trim();
+  fallbackSunset.trim();
+
+  int sep = combined.indexOf('|');
+  if(sep < 0)
+    sep = combined.indexOf('/');
+
+  if(sep > 0)
+  {
+    *sunriseText = combined.substring(0, sep);
+    *sunsetText = combined.substring(sep + 1);
+  }
+  else
+  {
+    *sunriseText = combined;
+    *sunsetText = fallbackSunset;
+  }
+
+  sunriseText->trim();
+  sunsetText->trim();
+  if(sunriseText->length() == 0 || *sunriseText == "null")
+    *sunriseText = "--:--";
+  if(sunsetText->length() == 0 || *sunsetText == "null")
+    *sunsetText = "--:--";
 }
 
 void Weather_drawDegreeC(int16_t x, int16_t y, uint16_t color)
@@ -378,7 +414,26 @@ void Weather_drawDegreeC(int16_t x, int16_t y, uint16_t color)
   tft.drawString("C", x + 10, y + 2, 2);
 }
 
-void Weather_drawTemperatureDigits(const String &value)
+void Weather_drawLocationPin(int16_t x, int16_t y, uint16_t color)
+{
+  tft.fillCircle(x, y + 6, 6, color);
+  tft.fillTriangle(x - 5, y + 10, x + 5, y + 10, x, y + 20, color);
+  tft.fillCircle(x, y + 6, 2, bgColor);
+}
+
+void Weather_drawTopBar(const String &cityName)
+{
+  Weather_drawLocationPin(17, 12, TFT_WHITE);
+  ChineseFont_drawString(32, 12, cityName.c_str(), TFT_WHITE, bgColor);
+
+  char timeText[6];
+  snprintf(timeText, sizeof(timeText), "%02d:%02d", hour(), minute());
+  tft.setTextDatum(TR_DATUM);
+  tft.setTextColor(TFT_WHITE, bgColor);
+  tft.drawString(timeText, 224, 13, 2);
+}
+
+void Weather_drawTemperatureDigits(int16_t baseX, int16_t baseY, const String &value)
 {
   String text = value;
   text.trim();
@@ -397,19 +452,16 @@ void Weather_drawTemperatureDigits(const String &value)
   {
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(TFT_WHITE, bgColor);
-    tft.drawString("--", 146, 91, 2);
-    Weather_drawDegreeC(170, 86, TFT_WHITE);
+    tft.drawString("--", baseX + 22, baseY + 22, 2);
+    Weather_drawDegreeC(baseX + 54, baseY + 8, TFT_WHITE);
     return;
   }
 
-  int16_t width = digitCount * 36 + (negative ? 18 : 0) + 28;
-  int16_t x = 118 + (112 - width) / 2;
-  if(x < 100)
-    x = 100;
+  int16_t x = baseX;
 
   if(negative)
   {
-    tft.fillRoundRect(x, 104, 14, 4, 2, TFT_WHITE);
+    tft.fillRoundRect(x, baseY + 28, 14, 4, 2, TFT_WHITE);
     x += 18;
   }
 
@@ -419,18 +471,137 @@ void Weather_drawTemperatureDigits(const String &value)
     if(!isDigit(c))
       continue;
 
-    dig.printfW3660(x, 76, c - '0');
+    dig.printfW3660(x, baseY, c - '0');
     x += 36;
   }
 
-  Weather_drawDegreeC(x + 1, 82, TFT_WHITE);
+  Weather_drawDegreeC(x + 1, baseY + 6, TFT_WHITE);
 }
 
-void Weather_drawInfoLine(int16_t y, const String &label, const String &value)
+void Weather_drawSun(int16_t cx, int16_t cy, int16_t r, uint16_t color)
 {
-  tft.drawFastHLine(18, y - 6, 204, TFT_DARKGREY);
-  ChineseFont_drawStringSmall(20, y, label.c_str(), TFT_DARKGREY, bgColor);
-  ChineseFont_drawStringSmall(64, y, value.c_str(), TFT_WHITE, bgColor);
+  for(uint8_t i = 0; i < 8; i++)
+  {
+    float angle = i * 0.785398f;
+    int16_t x0 = cx + cos(angle) * (r + 4);
+    int16_t y0 = cy + sin(angle) * (r + 4);
+    int16_t x1 = cx + cos(angle) * (r + 12);
+    int16_t y1 = cy + sin(angle) * (r + 12);
+    tft.drawLine(x0, y0, x1, y1, color);
+    tft.drawLine(x0 + 1, y0, x1 + 1, y1, color);
+  }
+  tft.fillCircle(cx, cy, r, color);
+}
+
+void Weather_drawCloud(int16_t x, int16_t y, uint16_t color)
+{
+  tft.fillCircle(x + 20, y + 27, 17, color);
+  tft.fillCircle(x + 42, y + 19, 24, color);
+  tft.fillCircle(x + 69, y + 28, 18, color);
+  tft.fillRoundRect(x + 12, y + 27, 76, 24, 8, color);
+}
+
+void Weather_drawRainDrops(int16_t x, int16_t y, uint16_t color)
+{
+  for(uint8_t i = 0; i < 3; i++)
+  {
+    int16_t dx = x + i * 20;
+    tft.drawLine(dx, y, dx - 5, y + 13, color);
+    tft.drawLine(dx + 1, y, dx - 4, y + 13, color);
+  }
+}
+
+void Weather_drawSnow(int16_t x, int16_t y, uint16_t color)
+{
+  for(uint8_t i = 0; i < 3; i++)
+  {
+    int16_t cx = x + i * 20;
+    tft.drawFastHLine(cx - 5, y, 10, color);
+    tft.drawFastVLine(cx, y - 5, 10, color);
+    tft.drawLine(cx - 4, y - 4, cx + 4, y + 4, color);
+    tft.drawLine(cx + 4, y - 4, cx - 4, y + 4, color);
+  }
+}
+
+void Weather_drawMainIcon(int16_t x, int16_t y, int weatherCode)
+{
+  uint16_t sunColor = tft.color565(255, 196, 35);
+  uint16_t cloudColor = tft.color565(238, 243, 248);
+  uint16_t rainColor = tft.color565(70, 168, 255);
+  uint16_t hazeColor = tft.color565(150, 162, 176);
+
+  bool isSunny = weatherCode == 0;
+  bool isRain = weatherCode == 3 || weatherCode == 4 || weatherCode == 5 ||
+    weatherCode == 6 || weatherCode == 7 || weatherCode == 8 ||
+    weatherCode == 9 || weatherCode == 10 || weatherCode == 11 ||
+    weatherCode == 12 || weatherCode == 21 || weatherCode == 22 ||
+    weatherCode == 23 || weatherCode == 24 || weatherCode == 25 ||
+    weatherCode == 301 || weatherCode == 302;
+  bool isSnow = weatherCode == 13 || weatherCode == 14 || weatherCode == 15 ||
+    weatherCode == 16 || weatherCode == 17 || weatherCode == 26 ||
+    weatherCode == 27 || weatherCode == 28;
+  bool isHaze = weatherCode == 18 || weatherCode == 20 || weatherCode == 29 ||
+    weatherCode == 30 || weatherCode == 31 || weatherCode == 53 ||
+    weatherCode == 32 || weatherCode == 49 || weatherCode == 54 ||
+    weatherCode == 55 || weatherCode == 56 || weatherCode == 57 ||
+    weatherCode == 58;
+
+  if(isSunny)
+  {
+    Weather_drawSun(x + 48, y + 43, 28, sunColor);
+    return;
+  }
+
+  Weather_drawSun(x + 63, y + 31, 25, sunColor);
+  Weather_drawCloud(x, y + 22, isHaze ? hazeColor : cloudColor);
+
+  if(isRain)
+    Weather_drawRainDrops(x + 32, y + 78, rainColor);
+  else if(isSnow)
+    Weather_drawSnow(x + 32, y + 82, TFT_WHITE);
+  else if(isHaze)
+  {
+    tft.drawFastHLine(x + 16, y + 81, 70, hazeColor);
+    tft.drawFastHLine(x + 26, y + 91, 55, hazeColor);
+  }
+}
+
+void Weather_drawBottomIcon(int16_t centerX, int16_t y, uint8_t iconType)
+{
+  uint16_t muted = tft.color565(174, 190, 210);
+  uint16_t blue = tft.color565(67, 169, 255);
+  uint16_t yellow = tft.color565(255, 190, 42);
+
+  if(iconType == 0)
+  {
+    tft.drawFastHLine(centerX - 14, y + 12, 27, muted);
+    tft.drawFastHLine(centerX - 10, y + 19, 20, muted);
+    tft.drawCircle(centerX + 14, y + 10, 5, muted);
+    tft.drawCircle(centerX + 8, y + 19, 4, muted);
+  }
+  else if(iconType == 1)
+  {
+    tft.fillCircle(centerX, y + 14, 8, blue);
+    tft.fillTriangle(centerX - 8, y + 13, centerX + 8, y + 13, centerX, y, blue);
+  }
+  else
+  {
+    tft.drawFastHLine(centerX - 15, y + 20, 30, yellow);
+    tft.fillCircle(centerX, y + 20, 9, yellow);
+    tft.fillRect(centerX - 11, y + 20, 22, 10, bgColor);
+    for(uint8_t i = 0; i < 5; i++)
+    {
+      int16_t dx = (int16_t)i * 8 - 16;
+      tft.drawLine(centerX + dx, y + 11, centerX + dx / 2, y + 16, yellow);
+    }
+  }
+}
+
+void Weather_drawMetricColumn(int16_t centerX, const String &value, const String &label, uint8_t iconType)
+{
+  Weather_drawBottomIcon(centerX, 173, iconType);
+  Weather_drawStringCentered(centerX, 201, value, TFT_WHITE, bgColor, true);
+  Weather_drawStringCentered(centerX, 222, label, tft.color565(150, 164, 184), bgColor, true);
 }
 
 //天气信息写到屏幕上
@@ -450,8 +621,16 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   String cityName = sk["cityname"].as<String>();
   String currentTemp = sk["temp"].as<String>();
   currentTemp.trim();
+  int currentTempValue = 0;
   if(currentTemp.length() == 0 || currentTemp == "null")
+  {
     currentTemp = "--";
+  }
+  else
+  {
+    currentTempValue = Weather_roundTemperature(currentTemp);
+    currentTemp = String(currentTempValue);
+  }
   String currentHumidity = sk["SD"].as<String>();
   currentHumidity.trim();
   if(currentHumidity.length() == 0 || currentHumidity == "null")
@@ -460,21 +639,15 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   String windText = sk["WD"].as<String>() + sk["WS"].as<String>();
   int weatherCode = atoi((sk["weathercode"].as<String>()).substring(1,3).c_str());
   int pm25V = sk["aqi"];
-  int currentTempValue = sk["temp"].as<int>();
 
   String aqiTxt = "优";
-  uint16_t pm25BgColor = tft.color565(156,202,127);//优
   if(pm25V>200){
-    pm25BgColor = tft.color565(136,11,32);//重度
     aqiTxt = "重度";
   }else if(pm25V>150){
-    pm25BgColor = tft.color565(186,55,121);//中度
     aqiTxt = "中度";
   }else if(pm25V>100){
-    pm25BgColor = tft.color565(242,159,57);//轻
     aqiTxt = "轻度";
   }else if(pm25V>50){
-    pm25BgColor = tft.color565(247,219,100);//良
     aqiTxt = "良";
   }
 
@@ -500,18 +673,17 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   String highTemp = fc["fc"].as<String>();
   lowTemp.trim();
   highTemp.trim();
+  String sunriseText;
+  String sunsetText;
+  Weather_parseSunTimes(fc["fi"].as<String>(), fc["fj"].as<String>(), &sunriseText, &sunsetText);
 
   tft.fillScreen(bgColor);
   
-  Weather_drawStringCentered(120, 10, cityName, TFT_WHITE, bgColor, false);
-  Weather_drawStringCentered(120, 35, currentWeather, TFT_WHITE, bgColor, true);
-  Weather_drawPill(84, 56, 72, aqiTxt, pm25BgColor, TFT_BLACK);
-
-  // Draw the weather icon at its native 60x60 size. The old 1.5x software
-  // scaler made the JPEG icon look blocky on the physical screen.
-  TJpgDec.setCallback(tft_output);
-  wrat.printfweather(28, 76, weatherCode);
-  Weather_drawTemperatureDigits(currentTemp);
+  Weather_drawTopBar(cityName);
+  Weather_drawTemperatureDigits(18, 58, currentTemp);
+  Weather_drawStringCentered(50, 129, currentWeather, TFT_WHITE, bgColor, false);
+  Weather_drawStringCentered(50, 153, Weather_rangeC(lowTemp, highTemp), tft.color565(160, 174, 196), bgColor, true);
+  Weather_drawMainIcon(132, 61, weatherCode);
 
   scrollText[0] = "空气质量 " + aqiTxt;
   scrollText[1] = "风向 " + windText;
@@ -520,10 +692,13 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   scrollText[4] = "最高温度 " + Weather_unitC(highTemp);
   scrollText[5] = "湿度 " + currentHumidity;
 
-  Weather_drawInfoLine(152, "今日", todayWeather);
-  Weather_drawInfoLine(176, "风力", windText);
-  Weather_drawInfoLine(200, "温度", Weather_unitC(lowTemp) + "-" + Weather_unitC(highTemp));
-  Weather_drawInfoLine(224, "湿度", currentHumidity);
+  tft.drawFastHLine(18, 169, 204, tft.color565(72, 82, 96));
+  tft.drawFastVLine(82, 184, 42, tft.color565(72, 82, 96));
+  tft.drawFastVLine(158, 184, 42, tft.color565(72, 82, 96));
+
+  Weather_drawMetricColumn(44, windText, "风力", 0);
+  Weather_drawMetricColumn(120, currentHumidity, "湿度", 1);
+  Weather_drawMetricColumn(196, sunriseText + "/" + sunsetText, "日出日落", 2);
 
   tempnum = currentTempValue;
   tempnum = tempnum+10;
