@@ -147,8 +147,15 @@ bool Stock_fetchQuote(const char* code, uint8_t index)
   payload = httpClient.getString();
   httpClient.end();
 
+  StaticJsonDocument<JSON_OBJECT_SIZE(1) + JSON_OBJECT_SIZE(5)> filter;
+  filter["data"]["symbol"] = true;
+  filter["data"]["name"] = true;
+  filter["data"]["price"] = true;
+  filter["data"]["change"] = true;
+  filter["data"]["change_percent"] = true;
+
   DynamicJsonDocument doc(768);
-  DeserializationError error = deserializeJson(doc, payload);
+  DeserializationError error = deserializeJson(doc, payload, DeserializationOption::Filter(filter));
   if(error)
   {
     Serial.print("Stock JSON error: ");
