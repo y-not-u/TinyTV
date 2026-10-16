@@ -212,12 +212,13 @@ enum AppPage
   PAGE_CLOCK = 0,
   PAGE_STOCK,
   PAGE_WEATHER,
+  PAGE_CODEX,
   PAGE_SETTINGS
 };
 
 AppPage currentPage = PAGE_CLOCK;
 AppPage previousPage = PAGE_CLOCK;
-const char* pageNames[] = {"Clock", "Stock", "Weather", "Settings"};
+const char* pageNames[] = {"Clock", "Stock", "Weather", "Codex", "Settings"};
 const int pageCount = sizeof(pageNames) / sizeof(pageNames[0]);
 unsigned long pageRenderTime = 0;
 
@@ -266,6 +267,7 @@ void Weather_reserveBuffers();
 void Stock_init();
 void Stock_invalidate();
 void Stock_renderPage(bool force);
+void Codex_renderPage(bool force);
 #if imgAst_EN
 void imgAnim();
 #endif

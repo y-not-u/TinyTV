@@ -166,6 +166,9 @@ void Page_confirm()
     case PAGE_SETTINGS:
       Page_renderSettings(true);
       break;
+    case PAGE_CODEX:
+      Codex_renderPage(true);
+      break;
   }
 }
 
@@ -190,6 +193,9 @@ void Page_render(bool force)
       break;
     case PAGE_SETTINGS:
       Page_renderSettings(force);
+      break;
+    case PAGE_CODEX:
+      Codex_renderPage(force);
       break;
   }
 }
