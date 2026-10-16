@@ -35,8 +35,14 @@
  * *****************************************************************/
 #include "ArduinoJson.h"
 #include <TimeLib.h>
+extern "C" {
+#include <lwip/dns.h>
+#include <lwip/tcp.h>
+}
 #include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
+#include "RuntimeCore.h"
+#include "RuntimeMetrics.h"
+#include <new>
 #include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
 #include <ESP8266mDNS.h>
@@ -107,7 +113,7 @@ DHT dht(DHTPIN,DHTTYPE);
 #include "img/pangzi/i9.h"
 
 int Anim = 0;           //太空人图标显示指针记录
-int AprevTime = 0;      //太空人更新时间记录
+uint32_t AprevTime = 0;      //太空人更新时间记录
 #endif
 
 
@@ -203,7 +209,6 @@ const int timeZone = 8;     //东八区
 
 //wifi连接UDP设置参数
 WiFiUDP Udp;
-WiFiClient wificlient;
 unsigned int localPort = 8000;
 float duty=0;
 
@@ -217,7 +222,7 @@ enum AppPage
 };
 
 AppPage currentPage = PAGE_CLOCK;
-AppPage previousPage = PAGE_CLOCK;
+
 const char* pageNames[] = {"Clock", "Stock", "Weather", "Codex", "Settings"};
 const int pageCount = sizeof(pageNames) / sizeof(pageNames[0]);
 unsigned long pageRenderTime = 0;
@@ -226,12 +231,12 @@ extern byte loadNum;
 
 
 //函数声明
-time_t getNtpTime();
-bool syncClock(uint8_t retryCount);
+void Ntp_poll();
+void Ntp_request();
 void digitalClockDisplay(int reflash_en);
-String week();
-String monthDay();
-void sendNTPpacket(IPAddress &address);
+String week(time_t value);
+String monthDay(time_t value);
+
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap);
 void loading(byte delayTime);
 void humidityWin();
@@ -404,9 +409,8 @@ void setup()
   Serial.println("启动UDP");
   Udp.begin(localPort);
   Serial.println("等待同步...");
-  setSyncProvider(getNtpTime);
-  setSyncInterval(300);
-  syncClock(5);
+  // TimeLib reads never perform network I/O. Ntp_poll calls setTime.
+  Ntp_request();
 
   
 
@@ -435,15 +439,12 @@ void setup()
   
   if(currentPage == PAGE_WEATHER)
     getCityWeater();
-#if DHT_EN
-  if(DHT_img_flag != 0)
-  IndoorTem();
-#endif
 #if !WebSever_EN
   WiFi.forceSleepBegin(); //wifi off
   Serial.println("WIFI休眠......");
   Wifi_en = 0;
 #endif
+  Render_init();
   Page_home();
 }
 
@@ -451,6 +452,7 @@ void setup()
 
 void loop()
 {
+  uint32_t started = micros();
   #if WebSever_EN
   Web_Sever();
   #endif
@@ -458,5 +460,12 @@ void loop()
   Touch_poll();
   #endif
   Page_render(false);
+  Ntp_poll();
+  Network_poll();
+  Data_poll();
   Serial_set();
+  uint32_t elapsed = micros() - started;
+  if(elapsed > perf.loopMaxUs) perf.loopMaxUs = elapsed;
+  Perf_report();
+  delay(0);
 }

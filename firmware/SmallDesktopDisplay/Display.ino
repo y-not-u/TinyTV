@@ -35,17 +35,10 @@ void loading(byte delayTime)//绘制进度条
 }
 
 //湿度图标显示函数
-void humidityWinAt(int x, int y)
-{
-  clk.setColorDepth(8);
-  
-  huminum = huminum/2;
-  clk.createSprite(52, 6);  //创建窗口
-  clk.fillSprite(0x0000);    //填充率
-  clk.drawRoundRect(0,0,52,6,3,0xFFFF);  //空心圆角矩形  起始位x,y,长度，宽度，圆弧半径，颜色
-  clk.fillRoundRect(1,1,huminum,4,2,humicol);   //实心圆角矩形
-  clk.pushSprite(x,y);  //窗口位置
-  clk.deleteSprite();
+void humidityWinAt(int x, int y) {
+  tft.fillRect(x, y, 52, 6, bgColor);
+  tft.drawRoundRect(x, y, 52, 6, 3, TFT_WHITE);
+  tft.fillRoundRect(x + 1, y + 1, constrain(huminum / 2, 0, 50), 4, 2, humicol);
 }
 
 void humidityWin()
@@ -54,16 +47,10 @@ void humidityWin()
 }
 
 //温度图标显示函数
-void tempWinAt(int x, int y)
-{
-  clk.setColorDepth(8);
-  
-  clk.createSprite(52, 6);  //创建窗口
-  clk.fillSprite(0x0000);    //填充率
-  clk.drawRoundRect(0,0,52,6,3,0xFFFF);  //空心圆角矩形  起始位x,y,长度，宽度，圆弧半径，颜色
-  clk.fillRoundRect(1,1,tempnum,4,2,tempcol);   //实心圆角矩形
-  clk.pushSprite(x,y);  //窗口位置
-  clk.deleteSprite();
+void tempWinAt(int x, int y) {
+  tft.fillRect(x, y, 52, 6, bgColor);
+  tft.drawRoundRect(x, y, 52, 6, 3, TFT_WHITE);
+  tft.fillRoundRect(x + 1, y + 1, constrain(tempnum, 0, 50), 4, 2, tempcol);
 }
 
 void tempWin()

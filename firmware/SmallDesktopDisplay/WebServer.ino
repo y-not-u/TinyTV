@@ -73,7 +73,7 @@ void handleconfig()
     {
       saveCityCodetoEEP(&web_cc);
       readCityCodefromEEP(&web_cc);
-      cityCode = String(web_cc);
+      if(cityCode != String(web_cc)) { cityCode = String(web_cc); Weather_configurationChanged(); }
       Serial.print("城市代码:");
       Serial.println(web_cc);
     }
@@ -105,8 +105,7 @@ void handleconfig()
     if(web_dhten != DHT_img_flag)
     {
       DHT_img_flag = web_dhten;
-      tft.fillScreen(0x0000);
-      Page_render(true);
+      Page_requestRedraw();
       UpdateWeater_en = 1;
     }
     Serial.print("DHT Sensor Enable： ");
@@ -120,8 +119,7 @@ void handleconfig()
     {
       LCD_Rotation = web_setro;
       tft.setRotation(LCD_Rotation);
-      tft.fillScreen(0x0000);
-      Page_render(true);
+      Page_requestRedraw();
       UpdateWeater_en = 1;
     }
     Serial.print("LCD Rotation:");
@@ -142,7 +140,7 @@ void handleconfig()
     saveStockConfig();
     Stock_invalidate();
     if(currentPage == PAGE_STOCK)
-      Page_render(true);
+      Page_requestRedraw();
     Serial.println("Stock Codes:");
     for(uint8_t group = 0; group < 2; group++)
     {
@@ -277,6 +275,7 @@ void Web_Sever_Init()
   // Serial.println(WiFi.localIP());
 
   server.on("/", handleconfig);
+  server.on("/metrics", Perf_send);
   server.on("/SetPage", handleSetPage);
   server.onNotFound(handleNotFound);
 

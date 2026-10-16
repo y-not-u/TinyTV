@@ -52,6 +52,7 @@ void Serial_set()
         // }
         
         cityCode = String(CityC);
+        Weather_configurationChanged();
         
         if(cityCode == "0")
         {
@@ -80,7 +81,6 @@ void Serial_set()
         SMOD = "";
       //设置屏幕方向后重新刷屏并显示
         tft.setRotation(RoSet);
-        tft.fillScreen(0x0000);
         LCD_reflash(1);//屏幕刷新程序
         UpdateWeater_en = 1;
 

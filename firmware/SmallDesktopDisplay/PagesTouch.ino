@@ -143,61 +143,61 @@ void Touch_onLongPress()
 }
 #endif
 
-void Page_next()
-{
+bool pageRedrawRequested = true;
+bool pageRefreshRequested = false;
+AppPage renderedPage = PAGE_CLOCK;
+bool pageHasRendered = false;
+uint32_t pageIntentUs = 0;
+void Page_requestRedraw() { pageRedrawRequested = true; }
+void Page_next() {
   currentPage = (AppPage)((currentPage + 1) % pageCount);
-  Page_render(true);
+  pageIntentUs = micros();
 }
-
-void Page_confirm()
-{
-  switch(currentPage)
-  {
-    case PAGE_CLOCK:
-      Page_renderClock(true);
-      break;
-    case PAGE_STOCK:
-      Page_renderStock(true);
-      break;
-    case PAGE_WEATHER:
-      UpdateWeater_en = 1;
-      Page_renderWeather(true);
-      break;
-    case PAGE_SETTINGS:
-      Page_renderSettings(true);
-      break;
-    case PAGE_CODEX:
-      Codex_renderPage(true);
-      break;
+void Page_confirm() { pageRefreshRequested = true; }
+void Page_home() {
+  currentPage = PAGE_CLOCK; pageRedrawRequested = true; pageIntentUs = micros();
+}
+void Page_render(bool force) {
+  bool entered = !pageHasRendered || renderedPage != currentPage;
+  if(entered) {
+    Network_cancel();
+    Stock_stop();
+    renderedPage = currentPage; pageHasRendered = true;
+    if(currentPage == PAGE_STOCK) Stock_prepareGroup();
+    if(currentPage == PAGE_WEATHER) Weather_enter();
+    if(currentPage == PAGE_CODEX) Codex_enter();
+    Animation_reset();
   }
-}
-
-void Page_home()
-{
-  currentPage = PAGE_CLOCK;
-  Page_render(true);
-}
-
-void Page_render(bool force)
-{
-  switch(currentPage)
-  {
-    case PAGE_CLOCK:
-      Page_renderClock(force);
-      break;
-    case PAGE_STOCK:
-      Page_renderStock(force);
-      break;
-    case PAGE_WEATHER:
-      Page_renderWeather(force);
-      break;
-    case PAGE_SETTINGS:
-      Page_renderSettings(force);
-      break;
-    case PAGE_CODEX:
-      Codex_renderPage(force);
-      break;
+  force = force || entered || pageRedrawRequested;
+  pageRedrawRequested = false;
+  if(pageRefreshRequested) {
+    if(currentPage == PAGE_CLOCK) { Ntp_request(); force = true; }
+    else if(currentPage == PAGE_STOCK) Stock_requestRefresh();
+    else if(currentPage == PAGE_WEATHER) getCityWeater();
+    else if(currentPage == PAGE_CODEX) Codex_requestRefresh();
+    else force = true;
+    pageRefreshRequested = false;
   }
+  if(force) {
+    tft.setTextSize(1); tft.setTextWrap(false, false); tft.setTextPadding(0);
+    tft.setTextDatum(TL_DATUM); tft.setTextColor(TFT_WHITE, bgColor);
+  }
+  uint32_t started = micros();
+  if(entered && pageIntentUs && started - pageIntentUs > perf.firstMaxUs) perf.firstMaxUs = started - pageIntentUs;
+  switch(currentPage) {
+    case PAGE_CLOCK: Page_renderClock(force); break;
+    case PAGE_STOCK: Page_renderStock(force); break;
+    case PAGE_WEATHER: Page_renderWeather(force); break;
+    case PAGE_SETTINGS: Page_renderSettings(force); break;
+    case PAGE_CODEX: Codex_renderPage(force); break;
+  }
+  pageIntentUs = 0;
+  if(force && micros() - started > perf.pageMaxUs) perf.pageMaxUs = micros() - started;
+}
+void Data_poll() {
+  if(currentPage == PAGE_STOCK) Stock_poll();
+  else if(currentPage == PAGE_WEATHER) Weather_poll();
+  else if(currentPage == PAGE_CODEX) Codex_poll();
 }
 
 void Page_drawHeader(const char* title)
@@ -205,21 +205,32 @@ void Page_drawHeader(const char* title)
   (void)title;
 }
 
-void Page_renderClock(bool force)
-{
-  if(force)
-  {
-    tft.fillScreen(TFT_BLACK);
-    Page_drawHeader(pageNames[PAGE_CLOCK]);
-    Hour_sign = 60;
-    Minute_sign = 60;
-    Second_sign = 60;
-    prevDisplay = 0;
+void Page_renderClock(bool force) {
+  if(force) {
+    // Cover the empty margins; digits and animation overwrite their own bounds.
+    tft.fillRect(0, 0, 240, 82, bgColor);
+    tft.fillRect(0, 82, 20, 60, bgColor);
+    tft.fillRect(56, 82, 4, 60, bgColor);
+    tft.fillRect(96, 82, 5, 60, bgColor);
+    tft.fillRect(137, 82, 4, 60, bgColor);
+    tft.fillRect(177, 82, 63, 30, bgColor);
+    tft.fillRect(177, 112, 5, 30, bgColor);
+    tft.fillRect(200, 112, 2, 30, bgColor);
+    tft.fillRect(220, 112, 20, 30, bgColor);
+    tft.fillRect(0, 142, 240, 18, bgColor);
+    tft.fillRect(0, 160, 160, 80, bgColor);
+    tft.fillRect(230, 160, 10, 80, bgColor);
+    tft.fillRect(160, 230, 70, 10, bgColor);
+    Hour_sign = Minute_sign = Second_sign = 60;
+    Animation_reset();
   }
   digitalClockDisplay(force ? 1 : 0);
 #if imgAst_EN
-  if(DHT_img_flag == 0)
-    imgAnim();
+  if(DHT_img_flag == 0) imgAnim();
+  else if(force) {
+    tft.fillRect(160, 160, 70, 70, bgColor);
+    IndoorTem();
+  }
 #endif
 }
 
@@ -228,61 +239,48 @@ void Page_renderStock(bool force)
   Stock_renderPage(force);
 }
 
-void Page_renderWeather(bool force)
-{
-  if(force)
-  {
-    tft.fillScreen(TFT_BLACK);
-    Page_drawHeader(pageNames[PAGE_WEATHER]);
-    UpdateWeater_en = 1;
-    weaterTime = 0;
-  }
-  LCD_reflash(force ? 1 : 0);
-}
+void Page_renderWeather(bool force) { Weather_drawCached(force); }
 
-void Page_renderSettings(bool force)
-{
-  if(!force && millis() - pageRenderTime < 5000)
-    return;
+void Page_renderSettings(bool force) {
+  if(!force && millis() - pageRenderTime < 5000) return;
   pageRenderTime = millis();
-  tft.fillScreen(TFT_BLACK);
-  Page_drawHeader(pageNames[PAGE_SETTINGS]);
-
-  bool wifiConnected = WiFi.status() == WL_CONNECTED;
-  String ipText = wifiConnected ? WiFi.localIP().toString() : "--";
-
-  tft.setTextDatum(CC_DATUM);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString("Settings", 120, 28, 2);
-  tft.drawFastHLine(22, 46, 196, TFT_DARKGREY);
-
-  tft.drawRoundRect(10, 62, 220, 40, 6, TFT_DARKGREY);
-  tft.setTextDatum(ML_DATUM);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString("Wi-Fi", 22, 82, 2);
-  tft.setTextDatum(MR_DATUM);
-  tft.setTextColor(wifiConnected ? TFT_GREEN : TFT_RED, TFT_BLACK);
-  tft.drawString(wifiConnected ? "Connected" : "Offline", 218, 82, 2);
-
-  tft.drawRoundRect(10, 112, 220, 40, 6, TFT_DARKGREY);
-  tft.setTextDatum(ML_DATUM);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString("IP", 22, 132, 2);
-  tft.setTextDatum(MR_DATUM);
-  tft.setTextColor(wifiConnected ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
-  tft.drawString(ipText, 218, 132, 2);
-
-  tft.drawRoundRect(10, 162, 220, 40, 6, TFT_DARKGREY);
-  tft.setTextDatum(ML_DATUM);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString("Firmware", 22, 182, 2);
-  tft.setTextDatum(MR_DATUM);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(Version, 218, 182, 2);
-
-  tft.setTextDatum(CC_DATUM);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString("http://sd3.local", 120, 222, 2);
+  bool connected = WiFi.status() == WL_CONNECTED;
+  String ip = connected ? WiFi.localIP().toString() : "--";
+  static bool previousConnected = false;
+  static String previousIp;
+  if(force) {
+    tft.fillRect(0, 0, 240, 62, TFT_BLACK);
+    tft.setTextDatum(CC_DATUM); tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawString("Settings", 120, 28, 2);
+    tft.drawFastHLine(22, 46, 196, TFT_DARKGREY);
+    const char* labels[] = {"Wi-Fi", "IP", "Firmware"};
+    for(uint8_t i = 0; i < 3; ++i) {
+      int y = 62 + i * 50;
+      tft.fillRect(0, y, 240, 50, TFT_BLACK);
+      tft.drawRoundRect(10, y, 220, 40, 6, TFT_DARKGREY);
+      tft.setTextDatum(ML_DATUM); tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      tft.drawString(labels[i], 22, y + 20, 2);
+      tft.setTextDatum(MR_DATUM);
+      tft.setTextColor(i == 2 ? TFT_WHITE : connected ? TFT_GREEN : i == 1 ? TFT_DARKGREY : TFT_RED, TFT_BLACK);
+      tft.drawString(i == 0 ? (connected ? "Connected" : "Offline") : i == 1 ? ip : String(Version), 218, y + 20, 2);
+    }
+    tft.fillRect(0, 212, 240, 28, TFT_BLACK);
+    tft.setTextDatum(CC_DATUM); tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.drawString("http://sd3.local", 120, 222, 2);
+  }
+  else {
+    if(previousConnected != connected) {
+      tft.fillRect(94, 70, 126, 24, TFT_BLACK);
+      tft.setTextDatum(MR_DATUM); tft.setTextColor(connected ? TFT_GREEN : TFT_RED, TFT_BLACK);
+      tft.drawString(connected ? "Connected" : "Offline", 218, 82, 2);
+    }
+    if(previousIp != ip) {
+      tft.fillRect(55, 120, 165, 24, TFT_BLACK);
+      tft.setTextDatum(MR_DATUM); tft.setTextColor(connected ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
+      tft.drawString(ip, 218, 132, 2);
+    }
+  }
+  previousConnected = connected; previousIp = ip;
 }
 
 void Home_show()

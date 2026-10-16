@@ -1,14 +1,3 @@
-const uint16_t WEATHER_HTTP_TIMEOUT_MS = 3500;
-
-void Weather_applyRequestHeaders(HTTPClient &httpClient, const String &referer)
-{
-  httpClient.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36");
-  httpClient.addHeader("Referer", referer);
-  httpClient.addHeader("Accept", "*/*");
-  httpClient.addHeader("Accept-Language", "zh-CN,zh;q=0.9");
-  httpClient.addHeader("Connection", "close");
-}
-
 int Weather_findObjectEnd(const String &payload, int objectStart)
 {
   int depth = 0;
@@ -85,147 +74,59 @@ bool Weather_extractIndexData(const String &payload, String *cityDZ, String *dat
   return true;
 }
 
-void LCD_reflash(int en)
-{
-  if (now() != prevDisplay || en == 1) 
-  {
-    prevDisplay = now();
-    if(currentPage == PAGE_CLOCK)
-      digitalClockDisplay(en);
-    prevTime=0;  
-  }
+String weatherCache[7];
+String weatherRendered[7];
+String weatherCacheCity;
+int weatherCacheCode = 99, weatherRenderedCode = -1;
+bool weatherHasData = false, weatherDirty = true, weatherRequested = false;
+bool weatherAttempted = false, cityRequested = false;
+uint32_t weatherLastAttempt = 0;
 
-  if(currentPage != PAGE_WEATHER)
+void Weather_enter() {
+  if(weatherCacheCity != cityCode) weatherRequested = true;
+}
+void Weather_configurationChanged() {
+  Network_cancelOwner(2); Network_cancelOwner(4);
+  weatherRequested = true;
+}
+void getCityCode() { cityRequested = true; }
+void getCityWeater() { weatherRequested = true; }
+void LCD_reflash(int en) { if(en) Page_requestRedraw(); }
+void Weather_result(const String &key, bool ok, const char* payload) {
+  if(currentPage != PAGE_WEATHER || cityCode != key) return;
+  String city, sk, fc;
+  if(ok && Weather_extractIndexData(String(payload), &city, &sk, &fc) && weaterData(&city, &sk, &fc)) {
+    weatherCacheCity = key; weatherHasData = true; weatherDirty = true;
+  }
+  else Serial.println(F("Weather update failed; retaining cache"));
+}
+void Weather_cityResult(bool ok, const char* payload) {
+  if(!ok) return;
+  String text(payload);
+  int start = text.indexOf("id=");
+  if(start < 0) return;
+  String code = text.substring(start + 4, start + 13);
+  long value = code.toInt();
+  if(value >= 101000000 && value <= 102000000) {
+    cityCode = code; weatherRequested = true;
+  }
+}
+void Weather_poll() {
+  if(currentPage != PAGE_WEATHER || Network_busy()) return;
+  if(cityRequested) {
+    if(weatherAttempted && millis() - weatherLastAttempt < 3000) return;
+    weatherAttempted = true; weatherLastAttempt = millis(); cityRequested = false;
+    Network_start(4, 0, "http://wgeo.weather.com.cn/ip/?_=" + String(now()), "", "http://www.weather.com.cn/");
     return;
-  
-  if(millis() - weaterTime > (60000*updateweater_time) || en == 1 || UpdateWeater_en != 0){ //10分钟更新一次天气
-    if(Wifi_en == 0)
-    {
-      WiFi.forceSleepWake();//wifi on
-      Serial.println("WIFI恢复......");
-      Wifi_en = 1;
-    }
-
-    if(WiFi.status() == WL_CONNECTED)
-    {
-      // Serial.println("WIFI已连接");
-      Weather_showStatus("Weather", "Loading weather...");
-      getCityWeater();
-      if(UpdateWeater_en != 0) UpdateWeater_en = 0;
-      weaterTime = millis();
-      #if !WebSever_EN
-      WiFi.forceSleepBegin(); // Wifi Off
-      Serial.println("WIFI休眠......");
-      Wifi_en = 0;
-      #endif
-    }
   }
+  bool due = !weatherAttempted || millis() - weatherLastAttempt >= (uint32_t)updateweater_time * 60000UL;
+  if(!due && !weatherRequested && !UpdateWeater_en) return;
+  if(weatherAttempted && millis() - weatherLastAttempt < 3000) return;
+  weatherAttempted = true; weatherLastAttempt = millis();
+  weatherRequested = false; UpdateWeater_en = 0;
+  Network_start(2, 0, "http://d1.weather.com.cn/weather_index/" + cityCode + ".html?_=" + String(now()),
+    cityCode, "http://www.weather.com.cn/weather1d/" + cityCode + ".shtml");
 }
-
-// 发送HTTP请求并且将服务器响应通过串口输出
-void getCityCode(){
- String URL = "http://wgeo.weather.com.cn/ip/?_="+String(now());
-  //创建 HTTPClient 对象
-  HTTPClient httpClient;
- 
-  //配置请求地址。此处也可以不使用端口号和PATH而单纯的
-  httpClient.begin(wificlient,URL); 
-  httpClient.setTimeout(WEATHER_HTTP_TIMEOUT_MS);
-  
-  //设置请求头中的User-Agent
-  Weather_applyRequestHeaders(httpClient, "http://www.weather.com.cn/");
- 
-  //启动连接并发送HTTP请求
-  int httpCode = httpClient.GET();
-  Serial.print("Send GET request to URL: ");
-  Serial.println(URL);
-  
-  //如果服务器响应OK则从服务器获取响应体信息并通过串口输出
-  if (httpCode == HTTP_CODE_OK) {
-    String str;
-    str.reserve(256);
-    str = httpClient.getString();
-
-    int aa = str.indexOf("id=");
-    if(aa>-1)
-    {
-       //cityCode = str.substring(aa+4,aa+4+9).toInt();
-       cityCode = str.substring(aa+4,aa+4+9);
-       Serial.println(cityCode); 
-       getCityWeater();
-    }
-    else
-    {
-      Serial.println("获取城市代码失败");  
-    }
-    
-    
-  } else {
-    Serial.println("请求城市代码错误：");
-    Serial.println(httpCode);
-  }
- 
-  //关闭ESP8266与服务器连接
-  httpClient.end();
-}
-
-
-
-// 获取城市天气
-void getCityWeater(){
- //String URL = "http://d1.weather.com.cn/dingzhi/" + cityCode + ".html?_="+String(now());//新
- String URL = "http://d1.weather.com.cn/weather_index/" + cityCode + ".html?_="+String(now());//原来
-  //创建 HTTPClient 对象
-  HTTPClient httpClient;
-  
-  httpClient.begin(wificlient,URL); 
-  httpClient.setTimeout(WEATHER_HTTP_TIMEOUT_MS);
-  
-  //设置请求头中的User-Agent
-  Weather_applyRequestHeaders(httpClient, String("http://www.weather.com.cn/weather1d/") + cityCode + ".shtml");
- 
-  //启动连接并发送HTTP请求
-  int httpCode = httpClient.GET();
-  Serial.println("正在获取天气数据");
-  Serial.println(URL);
-  
-  //如果服务器响应OK则从服务器获取响应体信息并通过串口输出
-  if (httpCode == HTTP_CODE_OK) {
-
-    String str;
-    str.reserve(4096);
-    str = httpClient.getString();
-    String jsonCityDZ;
-    String jsonDataSK;
-    String jsonFC;
-
-    bool parsed = Weather_extractIndexData(str, &jsonCityDZ, &jsonDataSK, &jsonFC);
-    str = "";
-    if(parsed && weaterData(&jsonCityDZ,&jsonDataSK,&jsonFC))
-    {
-      Serial.println("获取成功");
-    }
-    else
-    {
-      Serial.println("天气数据解析失败");
-      if(currentPage == PAGE_WEATHER)
-        Weather_showStatus("Update failed", "Parse failed");
-    }
-    
-  } else {
-    Serial.println("请求城市天气错误：");
-    Serial.println(httpCode);
-    if(currentPage == PAGE_WEATHER)
-    {
-      String message = "HTTP " + String(httpCode);
-      Weather_showStatus("Update failed", message.c_str());
-    }
-  }
- 
-  //关闭ESP8266与服务器连接
-  httpClient.end();
-}
-
 
 String scrollText[7];//天气信息存储
 
@@ -314,45 +215,11 @@ void Weather_drawDetails(const String details[], int detailCount)
     ChineseFont_drawString(20, 109 + i * 18, details[i].c_str(), TFT_WHITE, bgColor);
 }
 
-int16_t Weather_mixedTextWidth(const char* str, bool small)
-{
-  int16_t width = 0;
-  uint8_t b;
-  while((b = (uint8_t)*str) != 0)
-  {
-    if(b < 0x80)
-    {
-      width += small ? 6 : tft.textWidth(String((char)b), 2);
-      str++;
-    }
-    else if((b & 0xE0) == 0xC0 && str[1])
-    {
-      width += small ? 15 : CHINESE_FONT_W;
-      str += 2;
-    }
-    else if((b & 0xF0) == 0xE0 && str[1] && str[2])
-    {
-      width += small ? 15 : CHINESE_FONT_W;
-      str += 3;
-    }
-    else
-    {
-      str++;
-    }
-  }
-  return width;
-}
-
-void Weather_drawStringCentered(int16_t centerX, int16_t y, const String &text, uint16_t fg, uint16_t bg, bool small)
-{
-  int16_t x = centerX - Weather_mixedTextWidth(text.c_str(), small) / 2;
-  if(x < 0)
-    x = 0;
-
-  if(small)
-    ChineseFont_drawStringSmall(x, y, text.c_str(), fg, bg);
-  else
-    ChineseFont_drawString(x, y, text.c_str(), fg, bg);
+void Weather_drawStringCentered(int16_t centerX, int16_t y, const String &text, uint16_t fg, uint16_t bg, bool small) {
+  uint8_t font = small ? 1 : 2;
+  int width = y >= 173 ? 70 : 100;
+  String fitted = Text_fit(text.c_str(), width, font);
+  Text_draw(centerX - Text_width(fitted.c_str(), font) / 2, y, fitted.c_str(), font, fg, bg, width);
 }
 
 int Weather_roundTemperature(const String &value)
@@ -424,7 +291,7 @@ void Weather_drawLocationPin(int16_t x, int16_t y, uint16_t color)
 void Weather_drawTopBar(const String &cityName)
 {
   Weather_drawLocationPin(17, 12, TFT_WHITE);
-  ChineseFont_drawString(32, 12, cityName.c_str(), TFT_WHITE, bgColor);
+  Text_draw(32, 12, cityName.c_str(), 2, TFT_WHITE, bgColor, 142);
 
   char timeText[6];
   snprintf(timeText, sizeof(timeText), "%02d:%02d", hour(), minute());
@@ -617,6 +484,7 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
     return false;
   }
   JsonObject sk = doc.as<JsonObject>();
+  if(sk.isNull() || !sk["cityname"].is<const char*>() || !sk["weather"].is<const char*>() || !sk.containsKey("temp")) return false;
 
   String cityName = sk["cityname"].as<String>();
   String currentTemp = sk["temp"].as<String>();
@@ -659,6 +527,7 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
     return false;
   }
   JsonObject dz = doc.as<JsonObject>();
+  if(dz.isNull() || !dz.containsKey("weather")) return false;
   String todayWeather = dz["weather"].as<String>();
 
   error = deserializeJson(doc, *dataFC);
@@ -669,6 +538,7 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
     return false;
   }
   JsonObject fc = doc.as<JsonObject>();
+  if(fc.isNull() || !fc.containsKey("fd") || !fc.containsKey("fc")) return false;
   String lowTemp = fc["fd"].as<String>();
   String highTemp = fc["fc"].as<String>();
   lowTemp.trim();
@@ -677,13 +547,14 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   String sunsetText;
   Weather_parseSunTimes(fc["fi"].as<String>(), fc["fj"].as<String>(), &sunriseText, &sunsetText);
 
-  tft.fillScreen(bgColor);
-  
-  Weather_drawTopBar(cityName);
-  Weather_drawTemperatureDigits(18, 58, currentTemp);
-  Weather_drawStringCentered(50, 129, currentWeather, TFT_WHITE, bgColor, false);
-  Weather_drawStringCentered(50, 153, Weather_rangeC(lowTemp, highTemp), tft.color565(160, 174, 196), bgColor, true);
-  Weather_drawMainIcon(132, 61, weatherCode);
+  weatherCache[0] = cityName;
+  weatherCache[1] = currentTemp;
+  weatherCache[2] = currentWeather;
+  weatherCache[3] = Weather_rangeC(lowTemp, highTemp);
+  weatherCache[4] = windText;
+  weatherCache[5] = currentHumidity;
+  weatherCache[6] = sunriseText + "/" + sunsetText;
+  weatherCacheCode = weatherCode;
 
   scrollText[0] = "空气质量 " + aqiTxt;
   scrollText[1] = "风向 " + windText;
@@ -691,14 +562,6 @@ bool weaterData(String *cityDZ,String *dataSK,String *dataFC)
   scrollText[3] = "温度 " + Weather_unitC(lowTemp) + "-" + Weather_unitC(highTemp);
   scrollText[4] = "最高温度 " + Weather_unitC(highTemp);
   scrollText[5] = "湿度 " + currentHumidity;
-
-  tft.drawFastHLine(18, 169, 204, tft.color565(72, 82, 96));
-  tft.drawFastVLine(82, 184, 42, tft.color565(72, 82, 96));
-  tft.drawFastVLine(158, 184, 42, tft.color565(72, 82, 96));
-
-  Weather_drawMetricColumn(44, windText, "风力", 0);
-  Weather_drawMetricColumn(120, currentHumidity, "湿度", 1);
-  Weather_drawMetricColumn(196, sunriseText + "/" + sunsetText, "日出日落", 2);
 
   tempnum = currentTempValue;
   tempnum = tempnum+10;
@@ -735,3 +598,56 @@ void scrollBanner(){
     }
     prevTime = 1;
 }
+
+void Weather_drawCached(bool force) {
+  static int shownMinute = -1;
+  if(!weatherHasData) {
+    if(force) {
+      // The same layout is populated with placeholders while the request runs.
+      for(uint8_t i = 0; i < 7; ++i) weatherCache[i] = "--";
+      weatherCache[0] = "Weather"; weatherCacheCode = 99;
+    }
+  }
+  if(force) {
+    tft.fillRect(0, 0, 240, 58, bgColor);
+    tft.fillRect(0, 58, 18, 111, bgColor);
+    tft.fillRect(118, 58, 14, 111, bgColor);
+    tft.fillRect(232, 58, 8, 111, bgColor);
+    tft.fillRect(0, 169, 240, 71, bgColor);
+    tft.drawFastHLine(18, 169, 204, tft.color565(72, 82, 96));
+    tft.drawFastVLine(82, 184, 42, tft.color565(72, 82, 96));
+    tft.drawFastVLine(158, 184, 42, tft.color565(72, 82, 96));
+  }
+  if(force || weatherRendered[0] != weatherCache[0] || shownMinute != minute()) {
+    tft.fillRect(0, 0, 240, 38, bgColor); Weather_drawTopBar(weatherCache[0]); shownMinute = minute();
+  }
+  if(force || weatherRendered[1] != weatherCache[1]) {
+    tft.fillRect(18, 58, 114, 66, bgColor);
+    tft.setViewport(18, 58, 114, 66, false);
+    Weather_drawTemperatureDigits(18, 58, weatherCache[1]); tft.resetViewport();
+  }
+  if(force || weatherRendered[2] != weatherCache[2]) {
+    tft.fillRect(0, 124, 132, 26, bgColor);
+    Weather_drawStringCentered(50, 129, weatherCache[2], TFT_WHITE, bgColor, false);
+  }
+  if(force || weatherRendered[3] != weatherCache[3]) {
+    tft.fillRect(0, 150, 132, 19, bgColor);
+    Weather_drawStringCentered(50, 153, weatherCache[3], tft.color565(160, 174, 196), bgColor, true);
+  }
+  if(force || weatherRenderedCode != weatherCacheCode) {
+    tft.fillRect(132, 58, 100, 111, bgColor); Weather_drawMainIcon(132, 61, weatherCacheCode);
+  }
+  const int centers[] = {44, 120, 196};
+  const char* labels[] = {"风力", "湿度", "日出日落"};
+  for(uint8_t i = 0; i < 3; ++i) {
+    if(force) Weather_drawMetricColumn(centers[i], weatherCache[i + 4], labels[i], i);
+    else if(weatherRendered[i + 4] != weatherCache[i + 4]) {
+      tft.fillRect(centers[i] - 35, 201, 70, 17, bgColor);
+      Weather_drawStringCentered(centers[i], 201, weatherCache[i + 4], TFT_WHITE, bgColor, true);
+    }
+  }
+  for(uint8_t i = 0; i < 7; ++i) weatherRendered[i] = weatherCache[i];
+  weatherRenderedCode = weatherCacheCode; weatherDirty = false;
+}
+
+bool Weather_valid() { return weatherHasData; }
