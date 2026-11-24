@@ -73,8 +73,6 @@ class RepositoryIntegrityTests(unittest.TestCase):
 
         for include in [
             '"qr.h"',
-            '"number.h"',
-            '"weathernum.h"',
             '"font/ZdyLwFont_20.h"',
             '"img/misaka.h"',
             '"img/temperature.h"',

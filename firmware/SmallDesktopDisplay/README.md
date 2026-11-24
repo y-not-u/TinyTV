@@ -4,22 +4,23 @@ This Arduino sketch is split into feature tabs so each subsystem can change with
 
 - `SmallDesktopDisplay.ino`: global configuration, shared state, setup, and main loop.
 - `Storage.ino`: EEPROM read/write helpers for Wi-Fi, city, brightness, rotation, refresh interval, DHT, and stock settings.
-- `Display.ino`: low-level TFT/JPEG callback and reusable drawing widgets.
+- `Display.ino`: TFT/JPEG callback, startup screen, and shared page headings.
+- `DisplayTheme.h`: display palette for page chrome, text, and data colors.
 - `PagesTouch.ino`: page navigation/rendering and optional touch input handling.
-- `ClockNtp.ino`: clock rendering and native-size date labels.
+- `ClockNtp.ino`: dot-matrix clock rendering and native-size date labels.
 - `AsyncNtp.ino`: nonblocking DNS/UDP time synchronization.
 - `AsyncNetwork.ino`: shared lwIP HTTP state machine; no remote I/O in renderers.
 - `RuntimeCore.h`: portable frame scheduling, UTF-8 traversal, request tokens, and HTTP framing.
 - `RenderBuffers.ino`: persistent partial drawing buffers.
 - `RuntimeMetrics.ino`: serial performance counters and read-only `/metrics` JSON.
-- `Weather.ino`: weather HTTP fetch, parsing, refresh scheduling, and weather screen rendering.
+- `Weather.ino`: weather HTTP fetch, parsing, and refresh scheduling.
+- `WeatherDisplay.ino`: pixel weather icons, current conditions, and daily temperature range.
 - `Codex.ino`: Codex quota fetch and screen rendering, with cached data on errors.
 - `Sensors.ino`: optional DHT11 indoor temperature/humidity rendering.
 - `WebServer.ino`: runtime configuration HTTP server and page-control endpoints.
 - `WiFiManagerPortal.ino`: WiFiManager captive portal and first-boot configuration fields.
 - `WiFiSetup.ino`: SmartConfig fallback when WiFiManager is disabled.
 - `SerialCommands.ino`: serial configuration commands.
-- `Astronaut.ino`: optional astronaut animation asset playback.
 
 Keep new code in the module that owns the behavior. Cross-module calls should go through the existing public functions declared in `SmallDesktopDisplay.ino` instead of directly mixing unrelated responsibilities.
 
@@ -54,11 +55,11 @@ headers/trailers at 4KiB. Unsupported encodings and malformed/truncated response
 fail closed. NTP has separate asynchronous DNS and UDP states and retains the
 existing three servers and UTC+8 setting. Reading the clock cannot initiate I/O.
 
-Animation submits only when its 37ms frame period expires, skipping missed
-frames. A 70×70 RGB565 image is decoded before one region transfer. Animation
-and HTTP pages share a persistent 16KiB workspace; a reusable 130×28 8-bit sprite
-handles stock value strips. Allocation failure falls back to direct region drawing
-(the network request fails without replacing cache if its workspace is unavailable).
+The clock redraws only dots that change between readings. Entering the clock
+page clears the display and draws the full layout. HTTP pages share a persistent
+16KiB workspace. A reusable 130×28 indexed sprite handles stock value strips,
+with direct drawing as a fallback. An unavailable HTTP workspace leaves cached
+data intact.
 There is no full-screen framebuffer. Chinese glyphs always use the generated
 native 16×16 data; measured ASCII advances and UTF-8-safe ellipsis keep mixed text
 inside its field. Shorter values overwrite the entire previous field.
@@ -74,14 +75,14 @@ python3 tests/device_soak.py --url http://sd3.local --minutes 30 --output /tmp/t
 The host suite compiles and executes the firmware's portable code with address
 and undefined-behavior sanitizers. It also runs the original touch polling function
 against simulated pin levels and tests the actual text renderer against a display
-stub. A midnight rollover test advances time during JPEG decoding to verify that
-each clock redraw uses one consistent timestamp. A C++ compiler is required. The optional device soak switches through all
-five pages and records uptime, heap, request outcomes, animation rate, and page
-latency without changing EEPROM. `/metrics` exposes diagnostic counters only.
-Serial emits `PERF` every ten seconds and a brief `NET` line per completed request;
-network counters describe HTTP transport, while `*_valid` indicates parsed cache.
-`decode_avg_us` includes JPEG decode and transfer, and `first_max_us` starts after
-gesture recognition; the deliberate 450ms single-tap wait is separate.
+stub. A midnight rollover test advances time during dot drawing to verify that
+each clock redraw uses one consistent timestamp. A C++ compiler is required.
+The optional device soak switches through all five pages and records uptime, heap,
+request outcomes, and page latency without changing EEPROM. `/metrics` exposes
+diagnostic counters only. Serial emits `PERF` every ten seconds and a brief `NET`
+line per completed request. Network counters describe HTTP transport, while
+`*_valid` indicates parsed cache. `first_max_us` starts after gesture recognition.
+The deliberate 450ms single-tap wait is separate.
 
 ### Measured device result — 2026-10-16
 

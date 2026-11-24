@@ -295,26 +295,4 @@ void Web_Sever()
   MDNS.update();
   server.handleClient();
 }
-//web服务打开后LCD显示登陆网址及IP
-void Web_sever_Win()
-{
-  IPAddress IP_adr = WiFi.localIP();
-  // strcpy(IP_adr,WiFi.localIP().toString());
-  clk.setColorDepth(8);
-  
-  clk.createSprite(200, 70);//创建窗口
-  clk.fillSprite(0x0000);   //填充率
-
-  // clk.drawRoundRect(0,0,200,100,5,0xFFFF);       //空心圆角矩形
-  clk.setTextDatum(CC_DATUM);   //设置文本数据
-  clk.setTextColor(TFT_GREEN, 0x0000); 
-  clk.drawString("Connect to Config:",70,10,2);
-  // clk.drawString("IP:",45,60,2);
-  clk.setTextColor(TFT_WHITE, 0x0000); 
-  clk.drawString("http://sd3.local",100,40,2);
-  // clk.drawString(&IP_adr,125,70,2);
-  clk.pushSprite(20,40);  //窗口位置
-    
-  clk.deleteSprite();
-}
 #endif

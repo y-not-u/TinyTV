@@ -42,6 +42,8 @@ extern "C" {
 #include <ESP8266WiFi.h>
 #include "RuntimeCore.h"
 #include "RuntimeMetrics.h"
+#include "DisplayTheme.h"
+#include "WeatherPixels.h"
 #include <new>
 #include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
@@ -51,8 +53,6 @@ extern "C" {
 #include <TJpg_Decoder.h>
 #include <EEPROM.h>
 #include "qr.h"
-#include "number.h"
-#include "weathernum.h"
 
 
 /* *****************************************************************
@@ -65,11 +65,8 @@ extern "C" {
 
 
 
-//注意，此版本中的DHT11传感器和太空人图片选择可以通过web网页设置来进行选择，无需通过使能标志来重新编译。
 //设定DHT11温湿度传感器使能标志
 #define DHT_EN  1
-//设置太空人图片是否使用
-#define imgAst_EN 1
 
 
 
@@ -100,24 +97,6 @@ DHT dht(DHTPIN,DHTTYPE);
 #include "img/temperature.h"
 #include "img/humidity.h"
 
-#if imgAst_EN
-#include "img/pangzi/i0.h"
-#include "img/pangzi/i1.h"
-#include "img/pangzi/i2.h"
-#include "img/pangzi/i3.h"
-#include "img/pangzi/i4.h"
-#include "img/pangzi/i5.h"
-#include "img/pangzi/i6.h"
-#include "img/pangzi/i7.h"
-#include "img/pangzi/i8.h"
-#include "img/pangzi/i9.h"
-
-int Anim = 0;           //太空人图标显示指针记录
-uint32_t AprevTime = 0;      //太空人更新时间记录
-#endif
-
-
-
 /* *****************************************************************
  *  参数设置
  * *****************************************************************/
@@ -145,7 +124,8 @@ char stockCodes[2][3][16] = {
 
 //LCD屏幕相关设置
 TFT_eSPI tft = TFT_eSPI();  // 引脚请自行配置tft_espi库中的 User_Setup.h文件
-TFT_eSprite clk = TFT_eSprite(&tft);
+// The previous timeout included about two seconds of TFT transfers.
+constexpr uint32_t Boot_wifiTimeoutMs = 8000;
 #define LCD_BL_PIN 5    //LCD背光引脚
 #define LCD_BL_MIN 20
 #define LCD_BL_MAX 100
@@ -155,12 +135,11 @@ TFT_eSprite clk = TFT_eSprite(&tft);
 #define TOUCH_DEBOUNCE_MS 30
 #define TOUCH_DOUBLE_CLICK_MS 450
 #define TOUCH_LONG_PRESS_MS 1800
-uint16_t bgColor = 0x0000;
+uint16_t bgColor = TinyTV::Theme::background;
 
 //其余状态标志位
 uint8_t Wifi_en = 1; //wifi状态标志位  1：打开    0：关闭
 uint8_t UpdateWeater_en = 0; //更新时间标志位
-int prevTime = 0;       //滚动显示更新标志位
 int DHT_img_flag = 0;   //DHT传感器使用标志位
 
 
@@ -179,20 +158,12 @@ unsigned long weaterTime = 0; //天气更新时间记录
 String SMOD = "";//串口数据存储
 
 
-/*** Component objects ***/
-Number      dig;
-WeatherNum  wrat;
-
-
 uint32_t targetTime = 0;   
 
 int tempnum = 0;   //温度百分比
 int huminum = 0;   //湿度百分比
 int tempcol =0xffff;   //温度显示颜色
 int humicol =0xffff;   //湿度显示颜色
-unsigned char Hour_sign   = 60;
-unsigned char Minute_sign = 60;
-unsigned char Second_sign = 60;
 
 //Web网站服务器
 ESP8266WebServer server(80);// 建立esp8266网站服务器对象
@@ -227,31 +198,27 @@ const char* pageNames[] = {"Clock", "Stock", "Weather", "Codex", "Settings"};
 const int pageCount = sizeof(pageNames) / sizeof(pageNames[0]);
 unsigned long pageRenderTime = 0;
 
-extern byte loadNum;
-
-
 //函数声明
 void Ntp_poll();
 void Ntp_request();
-void digitalClockDisplay(int reflash_en);
+void digitalClockDisplay(bool force);
 String week(time_t value);
 String monthDay(time_t value);
 
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap);
-void loading(byte delayTime);
+void Boot_showConnecting(uint32_t elapsed);
+void Boot_showConnected(const char* address);
+void Boot_showSetup(const char* ssid);
 void humidityWin();
 void humidityWinAt(int x, int y);
 void tempWin();
 void tempWinAt(int x, int y);
 void LCD_reflash(int en);
-void Weather_drawDetails(const String details[], int detailCount);
-void Weather_showStatus(const char* title, const char* message);
 void savewificonfig();
 void readwificonfig();
 void deletewificonfig();
 void getCityCode();
 void getCityWeater();
-bool weaterData(String *cityDZ,String *dataSK,String *dataFC);
 void saveStockConfig();
 void readStockConfig();
 const char* getStockCode(uint8_t group, uint8_t index);
@@ -267,15 +234,13 @@ void Page_renderClock(bool force);
 void Page_renderStock(bool force);
 void Page_renderWeather(bool force);
 void Page_renderSettings(bool force);
-void Page_drawHeader(const char* title);
-void Weather_reserveBuffers();
+void Theme_drawRule(int y);
+void Theme_drawHeader(const char* title, const char* detail);
+void Weather_drawCached(bool force);
 void Stock_init();
 void Stock_invalidate();
 void Stock_renderPage(bool force);
 void Codex_renderPage(bool force);
-#if imgAst_EN
-void imgAnim();
-#endif
 #if DHT_EN
 void IndoorTem();
 #endif
@@ -290,10 +255,8 @@ void Touch_onLongPress();
 void Web_Sever_Init();
 void Web_Sever();
 void handleSetPage();
-void Web_sever_Win();
 #endif
 #if WM_EN
-void Web_win();
 void Webconfig();
 String getParam(String name);
 void saveParamCallback();
@@ -312,7 +275,6 @@ void setup()
 {
   Serial.begin(115200);
   EEPROM.begin(1024);
-  Weather_reserveBuffers();
   Stock_init();
   readStockConfig();
   #if TOUCH_EN
@@ -356,34 +318,24 @@ void setup()
   readwificonfig();//读取存储的wifi信息
   Serial.print("正在连接WIFI ");
   Serial.println(wificonf.stassid);
+  Boot_showConnecting(0);
+  const uint32_t wifiStarted = millis();
   WiFi.begin(wificonf.stassid, wificonf.stapsw);
-  
+
   TJpgDec.setJpgScale(1);
   TJpgDec.setSwapBytes(true);
   TJpgDec.setCallback(tft_output);
 
-  while (WiFi.status() != WL_CONNECTED) 
-  {
-    loading(30);  
-      
-    if(loadNum>=194)
-    {
-      //使能web配网后自动将smartconfig配网失效
-      #if WM_EN
-      Web_win();
-      Webconfig();
-      #endif
-
-      #if !WM_EN
-      SmartConfig();
-      #endif   
-      break;
-    }
+  while(WiFi.status() != WL_CONNECTED && millis() - wifiStarted < Boot_wifiTimeoutMs) {
+    Boot_showConnecting(millis() - wifiStarted);
+    delay(30);
   }
-  delay(10); 
-  while(loadNum < 194) //让动画走完
-  { 
-    loading(1);
+  if(WiFi.status() != WL_CONNECTED) {
+    #if WM_EN
+    Webconfig();
+    #else
+    SmartConfig();
+    #endif
   }
 
   if(WiFi.status() == WL_CONNECTED)
@@ -399,8 +351,10 @@ void setup()
     #if WebSever_EN
     //开启web服务器初始化
     Web_Sever_Init();
-    Web_sever_Win();
+    Boot_showConnected("http://sd3.local");
     delay(10000);
+    #else
+    Boot_showConnected(nullptr);
     #endif
   }
 

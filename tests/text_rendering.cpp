@@ -18,6 +18,7 @@ public:
 struct Region { int x, y, w, h; };
 struct FakeTft {
   bool swap = false;
+  int scale = 1;
   std::vector<Region> regions;
   std::vector<uint16_t> pixels;
   int textWidth(const char* text, uint8_t font) {
@@ -26,18 +27,20 @@ struct FakeTft {
       result += font == 1 ? 6 : *text == 'i' ? 4 : *text == 'M' ? 12 : 8;
       ++text;
     }
-    return result;
+    return result * scale;
   }
   bool getSwapBytes() { return swap; }
   void setSwapBytes(bool value) { swap = value; }
   void pushImage(int x, int y, int w, int h, uint16_t* data) {
     assert(swap); regions.push_back({x,y,w,h}); pixels.assign(data, data+w*h);
   }
-  void setTextSize(int size) { assert(size == 1); }
+  void startWrite() {}
+  void endWrite() {}
+  void setTextSize(int size) { assert(size == 1 || size == 2); scale = size; }
   void setTextWrap(bool x, bool y) { assert(!x && !y); }
   void setTextDatum(int) {}
   void setTextColor(uint16_t, uint16_t) {}
-  int fontHeight(uint8_t font) { return font == 1 ? 8 : 16; }
+  int fontHeight(uint8_t font) { return (font == 1 ? 8 : 16) * scale; }
   void drawChar(uint16_t cp, int x, int y, uint8_t font) {
     char text[] = {(char)cp,0};
     regions.push_back({x,y,textWidth(text,font),fontHeight(font)});
@@ -71,4 +74,19 @@ int main() {
   tft.regions.clear();
   Text_draw(0,0,u8"😀中",2,0xffff,0,32);
   assert(tft.regions.size() == 2);
+
+  tft.regions.clear();
+  Text_drawCenteredDouble(120, 12, u8"北京", 0xffff, 0, 204);
+  assert(tft.regions.size() == 32);
+  assert(tft.regions[0].x == 88 && tft.regions[0].y == 12);
+  assert(tft.regions[16].x == 120 && tft.regions[31].y == 42);
+  assert(tft.regions[0].w == 32 && tft.regions[0].h == 2);
+  assert(tft.scale == 1 && !tft.swap);
+
+  tft.regions.clear();
+  Text_drawCenteredDouble(120, 12, u8"超长中文城市名称iMABC", 0xffff, 0, 204);
+  for(const Region &region : tft.regions) {
+    assert(region.x >= 18 && region.x + region.w <= 222);
+    assert(region.y >= 12 && region.y + region.h <= 44);
+  }
 }

@@ -9,13 +9,18 @@ static int chineseFont_findIndex(uint16_t unicode) {
   }
   return -1;
 }
+static uint16_t ChineseFont_rowBits(int index, int row) {
+  if(index < 0) return row == 0 || row == 15 ? 0xffff : 0x8001;
+  int offset = index * 32 + row * 2;
+  return (uint16_t)pgm_read_byte(&chineseFontBitmaps[offset]) << 8 |
+         pgm_read_byte(&chineseFontBitmaps[offset + 1]);
+}
+
 void ChineseFont_drawChar(int x, int y, uint16_t unicode, uint16_t fg, uint16_t bg) {
   uint16_t pixels[16 * 16];
   int idx = chineseFont_findIndex(unicode);
   for(int row = 0; row < 16; ++row) {
-    uint16_t bits = idx < 0 ? (row == 0 || row == 15 ? 0xffff : 0x8001) :
-      ((uint16_t)pgm_read_byte(&chineseFontBitmaps[idx * 32 + row * 2]) << 8) |
-      pgm_read_byte(&chineseFontBitmaps[idx * 32 + row * 2 + 1]);
+    uint16_t bits = ChineseFont_rowBits(idx, row);
     for(int col = 0; col < 16; ++col) pixels[row * 16 + col] = bits & (0x8000 >> col) ? fg : bg;
   }
   bool swap = tft.getSwapBytes();
@@ -23,6 +28,25 @@ void ChineseFont_drawChar(int x, int y, uint16_t unicode, uint16_t fg, uint16_t 
   tft.pushImage(x, y, 16, 16, pixels);
   tft.setSwapBytes(swap);
 }
+static void ChineseFont_drawCharDouble(int x, int y, uint16_t unicode, uint16_t fg, uint16_t bg) {
+  uint16_t pixels[32 * 2];
+  int idx = chineseFont_findIndex(unicode);
+  bool swap = tft.getSwapBytes();
+  tft.setSwapBytes(true);
+  tft.startWrite();
+  for(int row = 0; row < 16; ++row) {
+    uint16_t bits = ChineseFont_rowBits(idx, row);
+    for(int col = 0; col < 16; ++col) {
+      uint16_t color = bits & (0x8000 >> col) ? fg : bg;
+      pixels[col * 2] = pixels[col * 2 + 1] = color;
+      pixels[32 + col * 2] = pixels[33 + col * 2] = color;
+    }
+    tft.pushImage(x, y + row * 2, 32, 2, pixels);
+  }
+  tft.endWrite();
+  tft.setSwapBytes(swap);
+}
+
 int Text_glyphWidth(uint32_t cp, uint8_t font) {
   if(cp >= 128) return 16;
   char glyph[] = {(char)cp, 0};
@@ -45,20 +69,41 @@ String Text_fit(const char* text, int width, uint8_t font) {
   if(width >= dots) result += "...";
   return result;
 }
-void Text_draw(int x, int y, const char* text, uint8_t font, uint16_t fg, uint16_t bg, int width) {
-  String fitted = Text_fit(text, width, font);
-  const char* cursor = fitted.c_str();
-  tft.setTextSize(1);
+static void Text_drawFitted(int x, int y, const char* cursor, uint8_t font, uint16_t fg, uint16_t bg, int scale) {
+  tft.setTextSize(scale);
   tft.setTextWrap(false, false);
   tft.setTextDatum(TL_DATUM);
   tft.setTextColor(fg, bg);
-  int height = max(16, (int)tft.fontHeight(font));
+  int fontHeight = tft.fontHeight(font);
+  int chineseHeight = 16 * scale;
+  int height = max(chineseHeight, fontHeight);
   while(*cursor) {
     uint32_t cp = TinyTV::nextCodepoint(cursor);
-    if(cp < 128) tft.drawChar((uint16_t)cp, x, y + (height - tft.fontHeight(font)) / 2, font);
-    else ChineseFont_drawChar(x, y + (height - 16) / 2, cp <= 0xffff ? cp : 0xffff, fg, bg);
-    x += Text_glyphWidth(cp, font);
+    if(cp < 128) {
+      tft.drawChar((uint16_t)cp, x, y + (height - fontHeight) / 2, font);
+      x += Text_glyphWidth(cp, font);
+    }
+    else {
+      int glyphY = y + (height - chineseHeight) / 2;
+      uint16_t glyph = cp <= 0xffff ? cp : 0xffff;
+      if(scale == 2) ChineseFont_drawCharDouble(x, glyphY, glyph, fg, bg);
+      else ChineseFont_drawChar(x, glyphY, glyph, fg, bg);
+      x += chineseHeight;
+    }
   }
+  tft.setTextSize(1);
+}
+
+void Text_draw(int x, int y, const char* text, uint8_t font, uint16_t fg, uint16_t bg, int width) {
+  tft.setTextSize(1);
+  String fitted = Text_fit(text, width, font);
+  Text_drawFitted(x, y, fitted.c_str(), font, fg, bg, 1);
+}
+
+void Text_drawCenteredDouble(int centerX, int y, const char* text, uint16_t fg, uint16_t bg, int width) {
+  tft.setTextSize(1);
+  String fitted = Text_fit(text, width / 2, 2);
+  Text_drawFitted(centerX - Text_width(fitted.c_str(), 2), y, fitted.c_str(), 2, fg, bg, 2);
 }
 void ChineseFont_drawString(int x, int y, const char* text, uint16_t fg, uint16_t bg) {
   Text_draw(x, y, text, 2, fg, bg, tft.width() - x);

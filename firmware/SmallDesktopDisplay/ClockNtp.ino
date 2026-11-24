@@ -1,48 +1,56 @@
+#include "DisplayTheme.h"
+#include "PixelDigits.h"
+
 static void Clock_drawDateLabel(int centerX, int y, const String &text) {
   int width = Text_width(text.c_str(), 2);
-  Text_draw(centerX - width / 2, y, text.c_str(), 2, TFT_WHITE, bgColor, 110);
+  Text_draw(centerX - width / 2, y, text.c_str(), 2, TinyTV::Theme::muted, bgColor, 110);
 }
 
-static uint8_t Clock_dateSign = 0;
-static uint8_t Clock_weekdaySign = 0;
+static void Clock_drawDigit(int x, int y, int pitch, int radius, int digit, int previous, uint16_t color) {
+  for(int row = 0; row < 7; ++row) {
+    uint8_t dots = TinyTV::pixelDigits[digit][row];
+    uint8_t changed = dots ^ (previous < 0 ? 0 : TinyTV::pixelDigits[previous][row]);
+    for(int column = 0; column < 5; ++column) {
+      uint8_t bit = 1 << (4 - column);
+      if(changed & bit)
+        tft.fillCircle(x + column * pitch, y + row * pitch, radius, dots & bit ? color : bgColor);
+    }
+  }
+}
 
-void digitalClockDisplay(int reflash_en)
-{
-  // JPEG decoding can cross a second/minute boundary. Keep this draw coherent.
+void digitalClockDisplay(bool force) {
+  static int previousDigits[6] = {-1, -1, -1, -1, -1, -1};
+  static int previousMonth = 0, previousDay = 0, previousWeekday = 0;
+  // Use the same timestamp for every digit and both date fields.
   const time_t displayTime = now();
-  int timey=82;
-  bool forceRefresh = (reflash_en == 1);
-  if(hour(displayTime)!=Hour_sign || reflash_en == 1)//时钟刷新
-  {
-    dig.printfW3660(20,timey,hour(displayTime)/10);
-    dig.printfW3660(60,timey,hour(displayTime)%10);
-    Hour_sign = hour(displayTime);
-  }
-  if(minute(displayTime)!=Minute_sign  || reflash_en == 1)//分钟刷新
-  {
-    dig.printfO3660(101,timey,minute(displayTime)/10);
-    dig.printfO3660(141,timey,minute(displayTime)%10);
-    Minute_sign = minute(displayTime);
-  }
-  if(second(displayTime)!=Second_sign  || reflash_en == 1)//分钟刷新
-  {
-    dig.printfW1830(182,timey+30,second(displayTime)/10);
-    dig.printfW1830(202,timey+30,second(displayTime)%10);
-    Second_sign = second(displayTime);
+  const int hours = hour(displayTime), minutes = minute(displayTime), seconds = second(displayTime);
+  const int digits[] = {hours / 10, hours % 10, minutes / 10, minutes % 10, seconds / 10, seconds % 10};
+  const int digitX[] = {19, 69, 135, 185, 100, 124};
+
+  for(int i = 0; i < 6; ++i) {
+    if(!force && digits[i] == previousDigits[i]) continue;
+    bool isSeconds = i >= 4;
+    tft.startWrite();
+    Clock_drawDigit(digitX[i], isSeconds ? 175 : 92, isSeconds ? 4 : 9, isSeconds ? 1 : 3,
+                    digits[i], force ? -1 : previousDigits[i], isSeconds ? TinyTV::Theme::red : TinyTV::Theme::text);
+    tft.endWrite();
+    previousDigits[i] = digits[i];
   }
 
-  if(reflash_en == 1) reflash_en = 0;
-  /***日期****/
-  if(forceRefresh || day(displayTime) != Clock_dateSign || weekday(displayTime) != Clock_weekdaySign)
-  {
-    tft.fillRect(0, 50, 210, 28, bgColor);
-    Clock_drawDateLabel(58, 54, monthDay(displayTime));
-    Clock_drawDateLabel(158, 54, week(displayTime));
-    Clock_dateSign = day(displayTime);
-    Clock_weekdaySign = weekday(displayTime);
+  if(force) {
+    tft.fillCircle(120, 110, 3, TinyTV::Theme::red);
+    tft.fillCircle(120, 128, 3, TinyTV::Theme::red);
   }
 
-  /***日期****/
+  const int dateMonth = month(displayTime), dateDay = day(displayTime), dateWeekday = weekday(displayTime);
+  if(force || dateMonth != previousMonth || dateDay != previousDay || dateWeekday != previousWeekday) {
+    tft.fillRect(0, 36, 240, 24, bgColor);
+    Clock_drawDateLabel(69, 40, monthDay(displayTime));
+    Clock_drawDateLabel(171, 40, week(displayTime));
+    previousMonth = dateMonth;
+    previousDay = dateDay;
+    previousWeekday = dateWeekday;
+  }
 }
 
 //星期

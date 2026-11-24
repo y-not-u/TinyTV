@@ -125,76 +125,67 @@ CodexWindow codexRenderedWindows[CODEX_MAX_WINDOWS] = {};
 char codexRenderedPlan[16] = "";
 String codexRenderedFooter;
 uint8_t codexRenderedCount = 0;
-void Codex_drawPage(bool force) {
-  uint16_t muted = tft.color565(136, 148, 160);
-  uint16_t panel = tft.color565(12, 18, 24);
-  if(force) {
-    tft.fillRect(0, 44, 240, 10, TFT_BLACK);
-    tft.fillRect(0, 54, 8, 144, TFT_BLACK);
-    tft.fillRect(232, 54, 8, 144, TFT_BLACK);
-    tft.fillRect(8, 120, 224, 6, TFT_BLACK);
-    tft.fillRect(8, 192, 224, 6, TFT_BLACK);
-    tft.fillRect(0, 198, 240, 42, TFT_BLACK);
+static void Codex_drawUsageBar(int y, float used, uint16_t color) {
+  const int cells = 20, width = 7;
+  int remaining = (int)(cells * width * used / 100.0f + 0.5f);
+  tft.startWrite();
+  for(int cell = 0; cell < cells; ++cell) {
+    int x = 21 + cell * 10;
+    tft.fillRect(x, y, width, 7, TinyTV::Theme::track);
+    int active = min(width, remaining);
+    if(active > 0) tft.fillRect(x, y, active, 7, color);
+    remaining -= active;
   }
-  if(force || strcmp(codexRenderedPlan, codexPlan)) {
-    tft.fillRect(0, 0, 240, 44, TFT_BLACK);
-    tft.setTextWrap(false);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawString("Codex", 12, 22, 4);
-    tft.setTextDatum(MR_DATUM);
-    tft.setTextColor(muted, TFT_BLACK);
-    tft.drawString(codexPlan, 228, 24, 2);
-    tft.drawFastHLine(12, 44, 216, TFT_DARKGREY);
+  tft.endWrite();
+}
 
-    strlcpy(codexRenderedPlan, codexPlan, sizeof(codexRenderedPlan));
+void Codex_drawPage(bool force) {
+  using namespace TinyTV::Theme;
+  if(force) tft.fillScreen(background);
+  const char* plan = codexHasData ? codexPlan : "";
+  if(force || strcmp(codexRenderedPlan, plan)) {
+    Theme_drawHeader("Codex", plan);
+    strlcpy(codexRenderedPlan, plan, sizeof(codexRenderedPlan));
   }
-  if(!codexHasData || codexWindowCount == 0) {
-    tft.fillRect(8, 54, 224, 144, TFT_BLACK);
+  if(!codexWindowCount || (!force && !codexRenderedCount))
+    tft.fillRect(12, 54, 216, 138, background);
+  if(!codexWindowCount) {
     tft.setTextDatum(CC_DATUM);
+    tft.setTextColor(text, background);
     tft.drawString(codexStatus, 120, 112, 2);
+    tft.setTextColor(muted, background);
     tft.drawString("Double tap to retry", 120, 142, 2);
   }
   for(uint8_t i = 0; i < codexWindowCount; i++) {
     int y = 54 + i * 72;
     CodexWindow &window = codexWindows[i];
     if(!force && i < codexRenderedCount && !memcmp(&window, &codexRenderedWindows[i], sizeof(window))) continue;
-    uint16_t accent = window.used >= 90 ? TFT_RED :
-      (window.used >= 70 ? TFT_ORANGE : tft.color565(93, 219, 166));
-    Render_clearCorners(8, y, 224, 66, TFT_BLACK);
-    tft.fillRoundRect(8, y, 224, 66, 4, panel);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(TFT_WHITE, panel);
-    Text_draw(16, y + 8, window.name, 2, TFT_WHITE, panel, 100);
+    uint16_t accent = window.used >= 90 ? red : window.used >= 70 ? amber : ice;
+    tft.fillRect(12, y, 216, 66, panel);
+    Text_draw(21, y + 8, window.name, 2, text, panel, 99);
     tft.setTextDatum(MR_DATUM);
     tft.setTextColor(accent, panel);
-    tft.drawString(String(window.used, 1) + "% used", 224, y + 16, 2);
-    tft.fillRoundRect(16, y + 31, 208, 6, 3, TFT_DARKGREY);
-    int width = (int)(208 * window.used / 100.0f);
-    if(width > 0)
-      tft.fillRect(16, y + 31, width, 6, accent);
+    tft.drawString(String(window.used, 1) + "% used", 218, y + 16, 2);
+    Codex_drawUsageBar(y + 31, window.used, accent);
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(muted, panel);
-    tft.drawString("Reset " + Codex_localTime(window.resetsAt), 16, y + 52, 2);
+    tft.drawString("Reset " + Codex_localTime(window.resetsAt), 21, y + 52, 2);
   }
   for(uint8_t i = codexWindowCount; i < (force ? CODEX_MAX_WINDOWS : codexRenderedCount); ++i) {
-    if(codexWindowCount) tft.fillRect(8, 54 + i * 72, 224, 66, TFT_BLACK);
+    if(codexWindowCount) tft.fillRect(12, 54 + i * 72, 216, 66, background);
   }
   memcpy(codexRenderedWindows, codexWindows, sizeof(codexWindows));
   codexRenderedCount = codexWindowCount;
-  String footer = codexHasData && codexStatus[0] ? "Cached: " + String(codexStatus) : "Read " + Codex_localTime(codexReadAt);
+  bool cached = codexWindowCount && codexStatus[0];
+  String footer;
+  if(cached) footer = "Cached: " + String(codexStatus);
+  else if(codexWindowCount) footer = "Read " + Codex_localTime(codexReadAt);
   if(force || footer != codexRenderedFooter) {
-    tft.fillRect(0, 198, 240, 42, TFT_BLACK);
+    tft.fillRect(0, 198, 240, 42, background);
     codexRenderedFooter = footer;
     tft.setTextDatum(ML_DATUM);
-    if(codexHasData && codexStatus[0]) {
-      tft.setTextColor(TFT_ORANGE, TFT_BLACK);
-      tft.drawString("Cached: " + String(codexStatus), 12, 208, 1);
-    }
-    else {
-      tft.setTextColor(muted, TFT_BLACK);
-      tft.drawString("Read " + Codex_localTime(codexReadAt), 12, 208, 2);
-    }
+    tft.setTextColor(cached ? amber : muted, background);
+    tft.drawString(footer, 12, 209, 2);
   }
 }
 

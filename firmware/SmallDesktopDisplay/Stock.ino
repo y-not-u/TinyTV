@@ -1,13 +1,10 @@
 const unsigned long STOCK_REFRESH_MS = 3000;
 const char* STOCK_API_HOST = "http://stockdata.lan";
-const int STOCK_VALUE_X = 100;
-const int STOCK_VALUE_Y_OFFSET = 4;
-const int STOCK_VALUE_WIDTH = 130;
-const int STOCK_VALUE_HEIGHT = 48;
-const uint8_t STOCK_VALUE_FONT = 4;
-const uint8_t STOCK_PRICE_FONT = 2;
-const int STOCK_LABEL_X = 14;
-const int STOCK_LABEL_WIDTH = 82;
+const int STOCK_VALUE_X = 98;
+const int STOCK_LABEL_X = 20;
+const int STOCK_LABEL_WIDTH = 76;
+const int STOCK_ROW_TOP = 54;
+const int STOCK_ROW_PITCH = 58;
 
 struct StockQuote
 {
@@ -158,22 +155,6 @@ void Stock_poll() {
   }
 }
 
-void Stock_drawHeaderRow()
-{
-  tft.setTextDatum(ML_DATUM);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString("Code", 10, 14, 2);
-  tft.setTextDatum(MR_DATUM);
-  tft.drawString("Price", 158, 14, 2);
-  tft.drawString("Chg%", 218, 14, 2);
-  tft.drawFastHLine(8, 28, 224, TFT_DARKGREY);
-}
-
-uint16_t Stock_blockColor()
-{
-  return tft.color565(12, 18, 24);
-}
-
 bool Stock_isAsciiText(const char* text)
 {
   while(*text)
@@ -192,13 +173,10 @@ void Stock_drawQuoteName(const char* text, int y, uint16_t fg, uint16_t bg) {
 
 void Stock_drawQuoteValues(uint8_t index, bool force)
 {
-  StockQuote *quote = &stockQuotes[index];
-  int y = 36 + index * 66;
-  int valueY = y + STOCK_VALUE_Y_OFFSET;
-  uint16_t blockColor = Stock_blockColor();
-  uint16_t mutedColor = tft.color565(120, 128, 136);
-  uint16_t priceColor = quote->changePercent < 0 ? tft.color565(102, 154, 118) : tft.color565(178, 112, 108);
-  uint16_t percentColor = quote->changePercent < 0 ? TFT_GREEN : TFT_RED;
+  using namespace TinyTV::Theme;
+  const StockQuote *quote = &stockQuotes[index];
+  int valueY = STOCK_ROW_TOP + index * STOCK_ROW_PITCH + 3;
+  uint16_t percentColor = quote->changePercent < 0 ? green : quote->changePercent > 0 ? red : muted;
   String priceText = quote->valid ? Stock_formatFloat(quote->price, 2) : "";
   String percentText = quote->valid ? Stock_formatPercent(quote->changePercent) : "";
 
@@ -209,10 +187,9 @@ void Stock_drawQuoteValues(uint8_t index, bool force)
     stockRenderedColor[index] == percentColor)
     return;
 
-  Render_valueLine(quote->valid ? priceText : String(""), STOCK_VALUE_X, valueY, 20,
-    STOCK_PRICE_FONT, priceColor, blockColor);
+  Render_valueLine(priceText, STOCK_VALUE_X, valueY, 20, 2, text, panel);
   Render_valueLine(quote->valid ? percentText : String("No data"), STOCK_VALUE_X, valueY + 20, 28,
-    quote->valid ? STOCK_VALUE_FONT : 2, quote->valid ? percentColor : mutedColor, blockColor);
+                   quote->valid ? 4 : 2, quote->valid ? percentColor : muted, panel);
   priceText.toCharArray(stockRenderedPrice[index], sizeof(stockRenderedPrice[index]));
   percentText.toCharArray(stockRenderedPercent[index], sizeof(stockRenderedPercent[index]));
 
@@ -222,21 +199,18 @@ void Stock_drawQuoteValues(uint8_t index, bool force)
 
 void Stock_drawQuoteBlock(uint8_t index)
 {
-  StockQuote *quote = &stockQuotes[index];
-  int y = 36 + index * 66;
-  uint16_t blockColor = Stock_blockColor();
-  uint16_t mutedColor = tft.color565(120, 128, 136);
-
-  Render_clearCorners(6, y, 228, 56, TFT_BLACK);
-  tft.fillRoundRect(6, y, 228, 56, 4, blockColor);
-  tft.setTextWrap(false);
-
-  tft.setTextDatum(ML_DATUM);
-  Stock_drawQuoteName(quote->name[0] == '\0' ? (quote->symbol[0] == '\0' ? quote->code : quote->symbol) : quote->name, y, TFT_WHITE, blockColor);
-
-  tft.setTextColor(mutedColor, blockColor);
-  Text_draw(STOCK_LABEL_X, y + 31, quote->symbol[0] == '\0' ? quote->code : quote->symbol,
-    2, mutedColor, blockColor, STOCK_LABEL_WIDTH);
+  using namespace TinyTV::Theme;
+  const StockQuote *quote = &stockQuotes[index];
+  int y = STOCK_ROW_TOP + index * STOCK_ROW_PITCH;
+  tft.fillRect(12, y, 216, 52, panel);
+  const char* symbol = quote->symbol[0] ? quote->symbol : quote->code;
+  if(quote->name[0] && strcmp(quote->name, symbol)) {
+    Stock_drawQuoteName(quote->name, y, text, panel);
+    Text_draw(STOCK_LABEL_X, y + 29, symbol, 2, muted, panel, STOCK_LABEL_WIDTH);
+  }
+  else {
+    Stock_drawQuoteName(symbol, y + 8, text, panel);
+  }
   strlcpy(stockRenderedName[index], quote->name, sizeof(stockRenderedName[index]));
   strlcpy(stockRenderedSymbol[index], quote->symbol, sizeof(stockRenderedSymbol[index]));
 
@@ -245,15 +219,8 @@ void Stock_drawQuoteBlock(uint8_t index)
 
 void Stock_renderPage(bool force) {
   if(!force && !stockDirty) return;
-  if(force) {
-    // Paint backgrounds around the cards; cards overwrite their own regions.
-    tft.fillRect(0, 0, 240, 36, TFT_BLACK);
-    tft.fillRect(0, 224, 240, 16, TFT_BLACK);
-    tft.fillRect(0, 36, 6, 188, TFT_BLACK);
-    tft.fillRect(234, 36, 6, 188, TFT_BLACK);
-    for(uint8_t i = 0; i < 3; ++i) tft.fillRect(6, 92 + i * 66, 228, 10, TFT_BLACK);
-    Stock_drawHeaderRow();
-  }
+  if(force) tft.fillScreen(TinyTV::Theme::background);
+  if(force || stockForceBlocks) Theme_drawHeader("Stocks", stockLastGroup == 0 ? "Day list" : "Night list");
   for(uint8_t i = 0; i < 3; ++i) {
     if(force || stockForceBlocks || strcmp(stockRenderedName[i], stockQuotes[i].name) ||
       strcmp(stockRenderedSymbol[i], stockQuotes[i].symbol)) Stock_drawQuoteBlock(i);

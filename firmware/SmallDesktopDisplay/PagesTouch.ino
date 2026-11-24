@@ -166,7 +166,6 @@ void Page_render(bool force) {
     if(currentPage == PAGE_STOCK) Stock_prepareGroup();
     if(currentPage == PAGE_WEATHER) Weather_enter();
     if(currentPage == PAGE_CODEX) Codex_enter();
-    Animation_reset();
   }
   force = force || entered || pageRedrawRequested;
   pageRedrawRequested = false;
@@ -180,7 +179,7 @@ void Page_render(bool force) {
   }
   if(force) {
     tft.setTextSize(1); tft.setTextWrap(false, false); tft.setTextPadding(0);
-    tft.setTextDatum(TL_DATUM); tft.setTextColor(TFT_WHITE, bgColor);
+    tft.setTextDatum(TL_DATUM); tft.setTextColor(TinyTV::Theme::text, bgColor);
   }
   uint32_t started = micros();
   if(entered && pageIntentUs && started - pageIntentUs > perf.firstMaxUs) perf.firstMaxUs = started - pageIntentUs;
@@ -200,37 +199,14 @@ void Data_poll() {
   else if(currentPage == PAGE_CODEX) Codex_poll();
 }
 
-void Page_drawHeader(const char* title)
-{
-  (void)title;
-}
-
 void Page_renderClock(bool force) {
   if(force) {
-    // Cover the empty margins; digits and animation overwrite their own bounds.
-    tft.fillRect(0, 0, 240, 82, bgColor);
-    tft.fillRect(0, 82, 20, 60, bgColor);
-    tft.fillRect(56, 82, 4, 60, bgColor);
-    tft.fillRect(96, 82, 5, 60, bgColor);
-    tft.fillRect(137, 82, 4, 60, bgColor);
-    tft.fillRect(177, 82, 63, 30, bgColor);
-    tft.fillRect(177, 112, 5, 30, bgColor);
-    tft.fillRect(200, 112, 2, 30, bgColor);
-    tft.fillRect(220, 112, 20, 30, bgColor);
-    tft.fillRect(0, 142, 240, 18, bgColor);
-    tft.fillRect(0, 160, 160, 80, bgColor);
-    tft.fillRect(230, 160, 10, 80, bgColor);
-    tft.fillRect(160, 230, 70, 10, bgColor);
-    Hour_sign = Minute_sign = Second_sign = 60;
-    Animation_reset();
+    tft.fillScreen(bgColor);
+    Theme_drawRule(71);
   }
-  digitalClockDisplay(force ? 1 : 0);
-#if imgAst_EN
-  if(DHT_img_flag == 0) imgAnim();
-  else if(force) {
-    tft.fillRect(160, 160, 70, 70, bgColor);
-    IndoorTem();
-  }
+  digitalClockDisplay(force);
+#if DHT_EN
+  if(force && DHT_img_flag) IndoorTem();
 #endif
 }
 
@@ -242,6 +218,7 @@ void Page_renderStock(bool force)
 void Page_renderWeather(bool force) { Weather_drawCached(force); }
 
 void Page_renderSettings(bool force) {
+  using namespace TinyTV::Theme;
   if(!force && millis() - pageRenderTime < 5000) return;
   pageRenderTime = millis();
   bool connected = WiFi.status() == WL_CONNECTED;
@@ -249,38 +226,34 @@ void Page_renderSettings(bool force) {
   static bool previousConnected = false;
   static String previousIp;
   if(force) {
-    tft.fillRect(0, 0, 240, 62, TFT_BLACK);
-    tft.setTextDatum(CC_DATUM); tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawString("Settings", 120, 28, 2);
-    tft.drawFastHLine(22, 46, 196, TFT_DARKGREY);
+    tft.fillScreen(background);
+    Theme_drawHeader("Settings", nullptr);
     const char* labels[] = {"Wi-Fi", "IP", "Firmware"};
     for(uint8_t i = 0; i < 3; ++i) {
-      int y = 62 + i * 50;
-      tft.fillRect(0, y, 240, 50, TFT_BLACK);
-      tft.drawRoundRect(10, y, 220, 40, 6, TFT_DARKGREY);
-      tft.setTextDatum(ML_DATUM); tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      int y = 54 + i * 48;
+      tft.fillRect(12, y, 216, 40, panel);
+      tft.setTextDatum(ML_DATUM); tft.setTextColor(muted, panel);
       tft.drawString(labels[i], 22, y + 20, 2);
-      tft.setTextDatum(MR_DATUM);
-      tft.setTextColor(i == 2 ? TFT_WHITE : connected ? TFT_GREEN : i == 1 ? TFT_DARKGREY : TFT_RED, TFT_BLACK);
-      tft.drawString(i == 0 ? (connected ? "Connected" : "Offline") : i == 1 ? ip : String(Version), 218, y + 20, 2);
     }
-    tft.fillRect(0, 212, 240, 28, TFT_BLACK);
-    tft.setTextDatum(CC_DATUM); tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.drawString("http://sd3.local", 120, 222, 2);
+    tft.setTextDatum(MR_DATUM); tft.setTextColor(text, panel);
+    tft.drawString(Version, 218, 170, 2);
+    tft.setTextDatum(CC_DATUM); tft.setTextColor(muted, background);
+    tft.drawString("http://sd3.local", 120, 216, 2);
   }
-  else {
-    if(previousConnected != connected) {
-      tft.fillRect(94, 70, 126, 24, TFT_BLACK);
-      tft.setTextDatum(MR_DATUM); tft.setTextColor(connected ? TFT_GREEN : TFT_RED, TFT_BLACK);
-      tft.drawString(connected ? "Connected" : "Offline", 218, 82, 2);
-    }
-    if(previousIp != ip) {
-      tft.fillRect(55, 120, 165, 24, TFT_BLACK);
-      tft.setTextDatum(MR_DATUM); tft.setTextColor(connected ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
-      tft.drawString(ip, 218, 132, 2);
-    }
+  if(force || previousConnected != connected) {
+    tft.fillRect(104, 62, 114, 24, panel);
+    tft.setTextDatum(MR_DATUM); tft.setTextColor(text, panel);
+    const char* status = connected ? "Connected" : "Offline";
+    tft.drawString(status, 218, 74, 2);
+    tft.fillRect(206 - tft.textWidth(status, 2), 71, 6, 6, connected ? green : red);
   }
-  previousConnected = connected; previousIp = ip;
+  if(force || previousIp != ip) {
+    tft.fillRect(65, 110, 153, 24, panel);
+    tft.setTextDatum(MR_DATUM); tft.setTextColor(connected ? text : muted, panel);
+    tft.drawString(ip, 218, 122, 2);
+  }
+  previousConnected = connected;
+  previousIp = ip;
 }
 
 void Home_show()

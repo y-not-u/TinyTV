@@ -7,31 +7,94 @@ bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t* bitmap)
   return 1;
 }
 
-//进度条函数
-byte loadNum = 6;
-void loading(byte delayTime)//绘制进度条
-{
-  clk.setColorDepth(8);
-  
-  clk.createSprite(200, 100);//创建窗口
-  clk.fillSprite(0x0000);   //填充率
+void Theme_drawRule(int y) {
+  tft.drawFastHLine(12, y, 216, TinyTV::Theme::track);
+  for(int x = 12; x <= 24; x += 6) tft.fillRect(x, y - 1, 4, 3, TinyTV::Theme::red);
+}
 
-  clk.drawRoundRect(0,0,200,16,8,0xFFFF);       //空心圆角矩形
-  clk.fillRoundRect(3,3,loadNum,10,5,0xFFFF);   //实心圆角矩形
-  clk.setTextDatum(CC_DATUM);   //设置文本数据
-  clk.setTextColor(TFT_GREEN, 0x0000); 
-  clk.drawString("Connecting to WiFi......",100,40,2);
-  clk.setTextColor(TFT_WHITE, 0x0000); 
-  clk.drawRightString(Version,180,60,2);
-  clk.pushSprite(20,120);  //窗口位置
-  
-  //clk.setTextDatum(CC_DATUM);
-  //clk.setTextColor(TFT_WHITE, 0x0000); 
-  //clk.pushSprite(130,180);
-  
-  clk.deleteSprite();
-  loadNum += 1;
-  delay(delayTime);
+void Theme_drawHeader(const char* title, const char* detail) {
+  tft.fillRect(0, 0, 240, 43, TinyTV::Theme::background);
+  tft.setTextSize(1);
+  tft.setTextWrap(false, false);
+  tft.setTextDatum(ML_DATUM);
+  tft.setTextColor(TinyTV::Theme::text, TinyTV::Theme::background);
+  tft.drawString(title, 12, 22, 4);
+  if(detail && detail[0]) {
+    tft.setTextDatum(MR_DATUM);
+    tft.setTextColor(TinyTV::Theme::muted, TinyTV::Theme::background);
+    tft.drawString(Text_fit(detail, 82, 2), 228, 24, 2);
+  }
+  Theme_drawRule(44);
+}
+
+static constexpr int Boot_segments = 14;
+
+static void Boot_drawLabel(const char* label, int y, uint8_t font, uint16_t color) {
+  tft.setTextColor(color, TinyTV::Theme::background);
+  tft.drawString(label, 120, y, font);
+}
+
+static void Boot_drawHeader() {
+  static const uint8_t wordmark[][7] = {
+    {31, 4, 4, 4, 4, 4, 4},       // T
+    {31, 4, 4, 4, 4, 4, 31},      // I
+    {17, 25, 25, 21, 19, 19, 17}, // N
+    {17, 17, 10, 4, 4, 4, 4},     // Y
+    {31, 4, 4, 4, 4, 4, 4},       // T
+    {17, 17, 17, 17, 10, 10, 4},  // V
+  };
+  tft.fillScreen(TinyTV::Theme::background);
+  tft.startWrite();
+  for(int letter = 0; letter < 6; ++letter) {
+    for(int row = 0; row < 7; ++row) {
+      for(int column = 0; column < 5; ++column) {
+        if(wordmark[letter][row] & (16 >> column))
+          tft.fillRect(50 + letter * 24 + column * 4, 67 + row * 4, 3, 3, TinyTV::Theme::text);
+      }
+    }
+  }
+  tft.endWrite();
+  tft.setTextDatum(CC_DATUM);
+  tft.setTextSize(1);
+  tft.setTextWrap(false, false);
+  Boot_drawLabel(Version, 202, 1, TinyTV::Theme::muted);
+}
+
+static void Boot_drawSegments(int first, int end, uint16_t color) {
+  tft.startWrite();
+  for(int segment = first; segment < end; ++segment)
+    tft.fillRect(37 + segment * 12, 114, 9, 10, color);
+  tft.endWrite();
+}
+
+void Boot_showConnecting(uint32_t elapsed) {
+  static int filled = -1;
+  if(filled < 0) {
+    Boot_drawHeader();
+    Boot_drawSegments(0, Boot_segments, TinyTV::Theme::track);
+    Boot_drawLabel("Connecting to Wi-Fi", 151, 2, TinyTV::Theme::text);
+    filled = 0;
+  }
+  // Reserve the final segment for an established connection.
+  int target = min(Boot_segments - 1, (int)(elapsed * Boot_segments / Boot_wifiTimeoutMs));
+  if(target > filled) {
+    Boot_drawSegments(filled, target, TinyTV::Theme::red);
+    filled = target;
+  }
+}
+
+void Boot_showConnected(const char* address) {
+  Boot_drawHeader();
+  Boot_drawSegments(0, Boot_segments, TinyTV::Theme::red);
+  Boot_drawLabel("Wi-Fi connected", 151, 2, TinyTV::Theme::text);
+  if(address) Boot_drawLabel(address, 173, 2, TinyTV::Theme::muted);
+}
+
+void Boot_showSetup(const char* ssid) {
+  Boot_drawHeader();
+  Theme_drawRule(114);
+  Boot_drawLabel("Wi-Fi setup", 141, 2, TinyTV::Theme::text);
+  Boot_drawLabel(ssid, 164, 2, TinyTV::Theme::muted);
 }
 
 //湿度图标显示函数

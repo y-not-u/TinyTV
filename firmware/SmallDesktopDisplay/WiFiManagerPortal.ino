@@ -1,26 +1,10 @@
 #if WM_EN
-//WEB配网LCD显示函数
-void Web_win()
-{
-  clk.setColorDepth(8);
-  
-  clk.createSprite(200, 60);//创建窗口
-  clk.fillSprite(0x0000);   //填充率
-
-  clk.setTextDatum(CC_DATUM);   //设置文本数据
-  clk.setTextColor(TFT_GREEN, 0x0000); 
-  clk.drawString("WiFi Connect Fail!",100,10,2);
-  clk.drawString("SSID:",45,40,2);
-  clk.setTextColor(TFT_WHITE, 0x0000); 
-  clk.drawString("AutoConnectAP",125,40,2);
-  clk.pushSprite(20,50);  //窗口位置
-    
-  clk.deleteSprite();
-}
+static const char setupNetworkName[] = "AutoConnectAP";
 
 //WEB配网函数
 void Webconfig()
 {
+  Boot_showSetup(setupNetworkName);
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP  
   
   delay(3000);
@@ -99,7 +83,7 @@ void Webconfig()
 
   bool res;
   // res = wm.autoConnect(); // auto generated AP name from chipid
-   res = wm.autoConnect("AutoConnectAP"); // anonymous ap
+   res = wm.autoConnect(setupNetworkName); // anonymous ap
   //  res = wm.autoConnect("AutoConnectAP","password"); // password protected ap
   
   while(!res);
@@ -168,10 +152,7 @@ void saveParamCallback(){
     delay(5);
   }
   tft.setRotation(LCD_Rotation);
-  tft.fillScreen(0x0000);
-  Web_win();
-  loadNum--;
-  loading(1);
+  Boot_showSetup(setupNetworkName);
   if(EEPROM.read(BL_addr) != LCD_BL_PWM)
   {
     EEPROM.write(BL_addr, LCD_BL_PWM);

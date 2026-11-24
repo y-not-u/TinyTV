@@ -19,6 +19,5 @@ void SmartConfig(void)
     break;
     }
   }
-  loadNum = 194;
 }
 #endif
