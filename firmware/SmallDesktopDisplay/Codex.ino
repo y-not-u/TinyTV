@@ -1,5 +1,5 @@
 // Quota percentages, not request counts: the API does not expose call totals.
-const char* CODEX_QUOTAS_URL = "http://aihub.lan/api/usage/quotas";
+const char* CODEX_QUOTAS_URL = "http://aihub.lan/v1/magpie/quotas";
 const unsigned long CODEX_REFRESH_MS = 60000;
 const uint8_t CODEX_MAX_WINDOWS = 2;
 
@@ -45,22 +45,41 @@ bool codexDirty = true, codexRequested = false;
 bool Codex_parse(const char* payload) {
   // Ignore account details, balance histories and all unrelated fields.
   // Filter the bounded response into a small visible snapshot.
+  const char* p = payload;
+  while(*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) ++p;
+
   StaticJsonDocument<512> filter;
-  filter[0]["provider"] = true;
-  filter[0]["plan"] = true;
-  filter[0]["readAt"] = true;
-  filter[0]["windows"][0]["name"] = true;
-  filter[0]["windows"][0]["used"] = true;
-  filter[0]["windows"][0]["resetsAt"] = true;
+  if(*p == '{') {
+    filter["data"][0]["provider"] = true;
+    filter["data"][0]["plan"] = true;
+    filter["data"][0]["readAt"] = true;
+    filter["data"][0]["windows"][0]["name"] = true;
+    filter["data"][0]["windows"][0]["used"] = true;
+    filter["data"][0]["windows"][0]["resetsAt"] = true;
+  } else {
+    filter[0]["provider"] = true;
+    filter[0]["plan"] = true;
+    filter[0]["readAt"] = true;
+    filter[0]["windows"][0]["name"] = true;
+    filter[0]["windows"][0]["used"] = true;
+    filter[0]["windows"][0]["resetsAt"] = true;
+  }
+
   DynamicJsonDocument doc(4096);
   DeserializationError error = deserializeJson(doc, payload, DeserializationOption::Filter(filter));
-  if(error || !doc.is<JsonArray>()) {
+  if(error) {
     Serial.printf("Codex JSON error: %s\n", error.c_str());
     codexStatus = "Invalid API data";
     return false;
   }
 
-  for(JsonObject provider : doc.as<JsonArray>()) {
+  JsonArray providers = doc.is<JsonArray>() ? doc.as<JsonArray>() : doc["data"].as<JsonArray>();
+  if(providers.isNull()) {
+    codexStatus = "Invalid API data";
+    return false;
+  }
+
+  for(JsonObject provider : providers) {
     if(strcmp(provider["provider"] | "", "codex") != 0)
       continue;
 

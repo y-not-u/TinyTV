@@ -27,7 +27,7 @@ Keep new code in the module that owns the behavior. Cross-module calls should go
 
 Single tap cycles Clock → Stock → Weather → Codex → Settings; double tap on
 Codex queues a refresh (minimum three seconds between attempts), and long press returns to Clock. While visible,
-Codex refreshes every 60 seconds from `http://aihub.lan/api/usage/quotas` and
+Codex refreshes every 60 seconds from `http://aihub.lan/v1/magpie/quotas` and
 selects the `provider == "codex"` entry. The device must be able to resolve and
 reach `aihub.lan` on its Wi-Fi network.
 
